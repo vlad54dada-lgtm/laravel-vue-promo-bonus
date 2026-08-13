@@ -12,6 +12,11 @@ const statusFilter = ref('');
 const loading = ref(false);
 const error = ref(null);
 
+// Тікет 2: скасування з підтвердженням
+const revokeTarget = ref(null); // claim, що чекає підтвердження в модалці
+const revokingId = ref(null);   // per-row loading: подвійний клік неможливий
+const revokeError = ref(null);
+
 const FILTERS = [
     { value: '', label: 'Всі' },
     { value: 'applied', label: 'Застосовані' },
@@ -65,6 +70,28 @@ watch(page, load);
 onMounted(load);
 
 defineExpose({ reload: load });
+
+function askRevoke(claim) {
+    revokeError.value = null;
+    revokeTarget.value = claim;
+}
+
+async function confirmRevoke() {
+    const claim = revokeTarget.value;
+    revokeTarget.value = null;
+    revokingId.value = claim.id;
+
+    try {
+        const { data } = await api.patch(`/promo/${claim.id}/revoke`);
+        emit('balance-changed', data.balance_cents);
+    } catch (e) {
+        // Наприклад, уже скасовано в іншій вкладці — показуємо причину
+        revokeError.value = errorMessage(e);
+    } finally {
+        revokingId.value = null;
+        await load(); // статус і список — з сервера, не з припущень клієнта
+    }
+}
 </script>
 
 <template>
@@ -89,6 +116,7 @@ defineExpose({ reload: load });
         </div>
 
         <p v-if="error" class="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+        <p v-if="revokeError" class="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ revokeError }}</p>
 
         <p v-else-if="!loading && claims.length === 0" class="mt-6 text-center text-sm text-slate-400">
             Поки що порожньо — застосуйте свій перший промокод.
@@ -128,7 +156,15 @@ defineExpose({ reload: load });
                         <template v-else>—</template>
                     </span>
 
-                    <slot name="actions" :claim="claim" />
+                    <button
+                        v-if="claim.status === 'applied'"
+                        type="button"
+                        :disabled="revokingId === claim.id"
+                        class="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        @click="askRevoke(claim)"
+                    >
+                        {{ revokingId === claim.id ? 'Скасовуємо…' : 'Скасувати' }}
+                    </button>
                 </div>
             </li>
         </ul>
@@ -154,6 +190,38 @@ defineExpose({ reload: load });
             >
                 Далі →
             </button>
+        </div>
+
+        <!-- Підтвердження скасування (Тікет 2) -->
+        <div
+            v-if="revokeTarget"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+            @click.self="revokeTarget = null"
+        >
+            <div class="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+                <h3 class="text-base font-semibold text-slate-900">Скасувати нарахування?</h3>
+                <p class="mt-2 text-sm text-slate-600">
+                    Бонус <strong>+{{ money(revokeTarget.amount_cents) }}</strong> за кодом
+                    <span class="font-mono font-semibold">{{ revokeTarget.code }}</span>
+                    буде скасовано, а сума — знята з балансу.
+                </p>
+                <div class="mt-5 flex justify-end gap-2">
+                    <button
+                        type="button"
+                        class="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 transition hover:bg-slate-50"
+                        @click="revokeTarget = null"
+                    >
+                        Залишити
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700"
+                        @click="confirmRevoke"
+                    >
+                        Так, скасувати
+                    </button>
+                </div>
+            </div>
         </div>
     </section>
 </template>

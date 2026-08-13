@@ -44,6 +44,15 @@ function onClaimed(balanceCents) {
     history.value?.reload();
 }
 
+/** Після revoke: баланс приходить у відповіді PATCH-запиту. */
+function onBalanceChanged(balanceCents) {
+    if (user.value && typeof balanceCents === 'number') {
+        user.value.balance_cents = balanceCents;
+    } else {
+        fetchMe();
+    }
+}
+
 onMounted(async () => {
     window.addEventListener('auth:logout', onLogout);
     if (hasToken()) {
@@ -80,7 +89,7 @@ onUnmounted(() => window.removeEventListener('auth:logout', onLogout));
 
             <main class="space-y-6">
                 <PromoClaimForm @claimed="onClaimed" />
-                <PromoHistory ref="history" @balance-changed="fetchMe" />
+                <PromoHistory ref="history" @balance-changed="onBalanceChanged" />
             </main>
         </div>
     </div>
