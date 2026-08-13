@@ -30,6 +30,9 @@ class AuthController extends Controller
             ]);
         }
 
+        // Не накопичуємо вічно валідні токени від повторних логінів
+        $user->tokens()->where('name', 'spa')->delete();
+
         return response()->json([
             'token' => $user->createToken('spa')->plainTextToken,
             'user' => [
@@ -39,6 +42,17 @@ class AuthController extends Controller
                 'balance_cents' => $user->balance_cents,
             ],
         ]);
+    }
+
+    /**
+     * Відкликає поточний токен на сервері — «Вийти» не лише чистить
+     * localStorage, а й робить викрадений токен марним.
+     */
+    public function logout(Request $request): JsonResponse
+    {
+        $request->user()->currentAccessToken()->delete();
+
+        return response()->json(['message' => 'Ви вийшли з акаунта.']);
     }
 
     /**

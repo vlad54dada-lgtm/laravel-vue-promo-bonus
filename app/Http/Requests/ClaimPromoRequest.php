@@ -17,8 +17,10 @@ class ClaimPromoRequest extends FormRequest
      */
     public function rules(): array
     {
+        // \A..\z замість ^..$: у PCRE $ матчить і перед фінальним \n,
+        // тож "CODE\n" пройшов би валідацію і потрапив у доменний шар.
         return [
-            'code' => ['required', 'string', 'regex:/^[A-Za-z0-9]{6,12}$/'],
+            'code' => ['required', 'string', 'regex:/\A[A-Za-z0-9]{6,12}\z/'],
         ];
     }
 

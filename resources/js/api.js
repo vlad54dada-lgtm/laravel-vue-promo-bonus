@@ -48,6 +48,9 @@ api.interceptors.response.use(
  * мережеві збої → загальний текст.
  */
 export function errorMessage(error) {
+    if (error.response?.status === 429) {
+        return 'Забагато спроб. Зачекайте хвилину і спробуйте ще раз.';
+    }
     const data = error.response?.data;
     if (data?.errors) {
         return Object.values(data.errors).flat()[0];

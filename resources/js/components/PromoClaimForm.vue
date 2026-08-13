@@ -10,6 +10,7 @@ const code = ref('');
 const state = ref('idle');
 const error = ref(null);
 const lastBonus = ref(null);
+const lastBalance = ref(null);
 
 const CODE_PATTERN = /^[A-Za-z0-9]{6,12}$/;
 
@@ -30,11 +31,13 @@ async function submit() {
     state.value = 'loading';
     error.value = null;
     lastBonus.value = null;
+    lastBalance.value = null;
 
     try {
         const { data } = await api.post('/promo/claim', { code: code.value });
         state.value = 'success';
         lastBonus.value = data.bonus_amount_cents;
+        lastBalance.value = data.balance_cents;
         code.value = '';
         emit('claimed', data.balance_cents);
     } catch (e) {
@@ -50,12 +53,16 @@ async function submit() {
         <h2 class="text-lg font-semibold text-slate-900">Застосувати промокод</h2>
 
         <form class="mt-4 flex flex-col gap-3 sm:flex-row" @submit.prevent="submit">
+            <label for="promo-code" class="sr-only">Промокод</label>
             <input
+                id="promo-code"
                 v-model.trim="code"
                 type="text"
                 placeholder="Наприклад, WELCOME50"
                 maxlength="12"
                 :disabled="loading"
+                :aria-invalid="clientHint ? 'true' : undefined"
+                :aria-describedby="clientHint ? 'promo-code-hint' : undefined"
                 class="flex-1 rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm uppercase tracking-wider focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-slate-50"
             />
             <button
@@ -74,17 +81,20 @@ async function submit() {
             </button>
         </form>
 
-        <p v-if="clientHint" class="mt-2 text-sm text-amber-600">{{ clientHint }}</p>
+        <p v-if="clientHint" id="promo-code-hint" aria-live="polite" class="mt-2 text-sm text-amber-600">{{ clientHint }}</p>
 
         <p
             v-if="state === 'success'"
+            role="status"
             class="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
         >
-            Бонус <strong>{{ money(lastBonus) }}</strong> нараховано на баланс 🎉
+            Бонус <strong>{{ money(lastBonus) }}</strong> нараховано 🎉
+            Новий баланс: <strong>{{ money(lastBalance) }}</strong>
         </p>
 
         <p
             v-if="state === 'error'"
+            role="alert"
             class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"
         >
             {{ error }}

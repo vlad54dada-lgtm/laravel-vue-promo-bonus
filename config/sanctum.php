@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
@@ -50,7 +50,7 @@ return [
     |
     */
 
-    'expiration' => null,
+    'expiration' => 60 * 24, // токени живуть добу; вічні токени — ризик для грошового акаунта
 
     /*
     |--------------------------------------------------------------------------
@@ -85,3 +85,4 @@ return [
     ],
 
 ];
+

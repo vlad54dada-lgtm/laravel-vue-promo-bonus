@@ -55,19 +55,16 @@ class PromoService
         }
 
         try {
+            // attempts: 3 — Laravel ретраїть транзакцію на deadlock (InnoDB
+            // gap-локи двох гравців на одному проміжку індексу) і SQLITE_BUSY;
+            // доменні винятки не ретраяться, а прокидаються одразу.
             return DB::transaction(function () use ($user, $promo): PromoClaim {
                 $lockedUser = User::query()
                     ->whereKey($user->getKey())
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                $alreadyUsed = PromoClaim::query()
-                    ->where('user_id', $lockedUser->getKey())
-                    ->where('promo_code_id', $promo->getKey())
-                    ->lockForUpdate()
-                    ->exists();
-
-                if ($alreadyUsed) {
+                if ($this->hasConsumingClaim($lockedUser, $promo)) {
                     throw new PromoAlreadyUsedException;
                 }
 
@@ -87,7 +84,7 @@ class PromoService
                 );
 
                 return $claim;
-            });
+            }, attempts: 3);
         } catch (PromoAlreadyUsedException $e) {
             $this->recordRejection($user, $code, PromoRejectReason::AlreadyUsed);
             throw $e;
@@ -157,7 +154,21 @@ class PromoService
             );
 
             return $claim->refresh();
-        });
+        }, attempts: 3);
+    }
+
+    /**
+     * Locking read перевірки «гравець уже споживав цей код» (applied|revoked).
+     * Саме locking: звичайний SELECT під InnoDB REPEATABLE READ читає снапшот
+     * і не побачить claim, закомічений паралельною транзакцією.
+     */
+    protected function hasConsumingClaim(User $lockedUser, PromoCode $promo): bool
+    {
+        return PromoClaim::query()
+            ->where('user_id', $lockedUser->getKey())
+            ->where('promo_code_id', $promo->getKey())
+            ->lockForUpdate()
+            ->exists();
     }
 
     /**

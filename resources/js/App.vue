@@ -27,7 +27,12 @@ function onLogout() {
     user.value = null;
 }
 
-function logout() {
+async function logout() {
+    try {
+        await api.post('/auth/logout'); // відкликаємо токен на сервері
+    } catch {
+        // токен уже недійсний — просто чистимо клієнт
+    }
     clearToken();
     user.value = null;
 }

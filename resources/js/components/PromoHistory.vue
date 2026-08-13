@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue';
+import { nextTick, onMounted, ref, watch } from 'vue';
 import api, { errorMessage } from '../api';
 import { money, dateTime } from '../format';
 
@@ -16,6 +16,8 @@ const error = ref(null);
 const revokeTarget = ref(null); // claim, що чекає підтвердження в модалці
 const revokingId = ref(null);   // per-row loading: подвійний клік неможливий
 const revokeError = ref(null);
+const revokeSuccess = ref(null);
+const modalEl = ref(null);
 
 const FILTERS = [
     { value: '', label: 'Всі' },
@@ -42,9 +44,16 @@ const REASON_LABELS = {
     already_used: 'код уже використано',
 };
 
+// Лічильник запитів: відповідь, що прийшла після новішого запиту
+// (швидке перемикання фільтрів/сторінок), ігнорується
+let loadSeq = 0;
+
 async function load() {
+    const seq = ++loadSeq;
     loading.value = true;
     error.value = null;
+    revokeError.value = null;
+    revokeSuccess.value = null;
     try {
         const { data } = await api.get('/promo/history', {
             params: {
@@ -52,18 +61,25 @@ async function load() {
                 ...(statusFilter.value ? { status: statusFilter.value } : {}),
             },
         });
+        if (seq !== loadSeq) return;
         claims.value = data.data;
         meta.value = data.meta;
     } catch (e) {
+        if (seq !== loadSeq) return;
         error.value = errorMessage(e);
     } finally {
-        loading.value = false;
+        if (seq === loadSeq) {
+            loading.value = false;
+        }
     }
 }
 
 watch(statusFilter, () => {
-    page.value = 1;
-    load();
+    if (page.value !== 1) {
+        page.value = 1; // watch(page) сам викличе load() — без дубля запиту
+    } else {
+        load();
+    }
 });
 watch(page, load);
 
@@ -73,23 +89,40 @@ defineExpose({ reload: load });
 
 function askRevoke(claim) {
     revokeError.value = null;
+    revokeSuccess.value = null;
     revokeTarget.value = claim;
 }
+
+// Фокус у модалку при відкритті (доступність: Esc теж працює лише з фокусом)
+watch(revokeTarget, async (target) => {
+    if (target) {
+        await nextTick();
+        modalEl.value?.focus();
+    }
+});
 
 async function confirmRevoke() {
     const claim = revokeTarget.value;
     revokeTarget.value = null;
     revokingId.value = claim.id;
 
+    let failure = null;
+    let success = null;
+
     try {
         const { data } = await api.patch(`/promo/${claim.id}/revoke`);
         emit('balance-changed', data.balance_cents);
+        success = `Бонус ${money(claim.amount_cents)} за кодом ${claim.code} скасовано, суму знято з балансу.`;
     } catch (e) {
-        // Наприклад, уже скасовано в іншій вкладці — показуємо причину
-        revokeError.value = errorMessage(e);
+        // Наприклад, уже скасовано в іншій вкладці — показуємо причину,
+        // а баланс просимо перечитати з сервера (emit без аргументу)
+        failure = errorMessage(e);
+        emit('balance-changed');
     } finally {
         revokingId.value = null;
         await load(); // статус і список — з сервера, не з припущень клієнта
+        revokeError.value = failure;
+        revokeSuccess.value = success;
     }
 }
 </script>
@@ -115,14 +148,15 @@ async function confirmRevoke() {
             </div>
         </div>
 
-        <p v-if="error" class="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
-        <p v-if="revokeError" class="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ revokeError }}</p>
+        <p v-if="error" role="alert" class="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+        <p v-if="revokeError" role="alert" class="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ revokeError }}</p>
+        <p v-if="revokeSuccess" role="status" class="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{{ revokeSuccess }}</p>
 
-        <p v-else-if="!loading && claims.length === 0" class="mt-6 text-center text-sm text-slate-400">
+        <p v-if="!error && !loading && claims.length === 0" class="mt-6 text-center text-sm text-slate-400">
             Поки що порожньо — застосуйте свій перший промокод.
         </p>
 
-        <ul v-else class="mt-4 divide-y divide-slate-100" :class="{ 'opacity-60': loading }">
+        <ul v-if="claims.length > 0" class="mt-4 divide-y divide-slate-100" :class="{ 'opacity-60': loading }">
             <li
                 v-for="claim in claims"
                 :key="claim.id"
@@ -195,11 +229,17 @@ async function confirmRevoke() {
         <!-- Підтвердження скасування (Тікет 2) -->
         <div
             v-if="revokeTarget"
-            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+            ref="modalEl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="revoke-modal-title"
+            tabindex="-1"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 focus:outline-none"
             @click.self="revokeTarget = null"
+            @keydown.esc="revokeTarget = null"
         >
             <div class="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-                <h3 class="text-base font-semibold text-slate-900">Скасувати нарахування?</h3>
+                <h3 id="revoke-modal-title" class="text-base font-semibold text-slate-900">Скасувати нарахування?</h3>
                 <p class="mt-2 text-sm text-slate-600">
                     Бонус <strong>+{{ money(revokeTarget.amount_cents) }}</strong> за кодом
                     <span class="font-mono font-semibold">{{ revokeTarget.code }}</span>

@@ -53,6 +53,9 @@ it('returns 422 for invalid code format and records nothing', function (array $p
     'too long (13)' => [['code' => 'ABCDEFGHIJKLM']],
     'non-latin characters' => [['code' => 'промо!']],
     'spaces inside' => [['code' => 'ABC 123']],
+    // Трейлінг-\n обрізає глобальний TrimStrings ще до валідації,
+    // а от перенос усередині коду має завалити regex (\A..\z якорі)
+    'newline inside' => [['code' => "WELC\nOME50"]],
 ]);
 
 // C3: неіснуючий код правильного формату
@@ -146,6 +149,42 @@ it('enforces UNIQUE(user_id, promo_code_id) at the database level', function () 
 
     expect(fn () => PromoClaim::create($attributes))
         ->toThrow(UniqueConstraintViolationException::class);
+});
+
+// C8 (продовження): гонка, що «проскочила» locking read і дійшла до INSERT,
+// мапиться через catch UniqueConstraintViolationException на контрактний 409
+it('maps a unique-violation race to 409 with a rejected record via the API', function () {
+    $user = User::factory()->create();
+    $promo = PromoCode::factory()->create(['code' => 'WELCOME50', 'amount_cents' => 5000]);
+
+    PromoClaim::create([
+        'user_id' => $user->id,
+        'promo_code_id' => $promo->id,
+        'code_entered' => $promo->code,
+        'amount_cents' => $promo->amount_cents,
+        'status' => \App\Enums\PromoClaimStatus::Applied,
+    ]);
+    $user->forceFill(['balance_cents' => 5000])->save();
+
+    // Сервіс-«сліпець»: перевірка дубля нічого не бачить — як конкурентна
+    // транзакція під REPEATABLE READ; INSERT впаде на UNIQUE-індексі
+    app()->instance(\App\Services\PromoService::class, new class extends \App\Services\PromoService
+    {
+        protected function hasConsumingClaim($lockedUser, $promo): bool
+        {
+            return false;
+        }
+    });
+
+    actingAs($user, 'sanctum');
+
+    postJson('/api/promo/claim', ['code' => 'WELCOME50'])
+        ->assertConflict()
+        ->assertJsonPath('error_code', 'PROMO_ALREADY_USED');
+
+    expect($user->refresh()->balance_cents)->toBe(5000)
+        ->and(WalletTransaction::count())->toBe(0)
+        ->and(PromoClaim::where('status', PromoClaimStatus::Rejected)->count())->toBe(1);
 });
 
 // C8 (продовження): rejected-спроби не блокуються унікальним індексом

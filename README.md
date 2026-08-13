@@ -1,66 +1,69 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Promo Bonus — тестове завдання «AI-асистований розробник»
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Міні-фіча гемблінг-платформи: нарахування бонусу за промокодом на баланс гравця, історія застосувань, скасування помилково нарахованого бонусу.
 
-## About Laravel
+**Стек:** Laravel 12 (REST API, Sanctum) · Vue 3 + Vite + axios · SQLite · Pest.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+Проєкт розроблено в парі з AI-інструментом (Claude Code) — повний лог промптів та ітерацій: [docs/PROMPTS_LOG.md](docs/PROMPTS_LOG.md).
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Швидкий старт
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Потрібно: PHP 8.2+ (з `pdo_sqlite`), Composer, Node 18+.
 
-## Learning Laravel
+```bash
+composer install
+cp .env.example .env && php artisan key:generate
+php artisan migrate --seed
+npm install && npm run build
+php artisan serve
+```
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+Відкрити http://localhost:8000. На Windows замість `cp` — `copy`. На запит «create database.sqlite?» від migrate — відповісти Yes. Для розробки фронтенда замість `npm run build` — `npm run dev` у другому терміналі.
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+## Демо-дані (сідер)
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+| Що | Значення |
+|---|---|
+| Гравець | `player@demo.test` / `password` |
+| Другий гравець | `other@demo.test` / `password` |
+| `WELCOME50` | бонус 50.00, безстроковий |
+| `SUMMER100` | бонус 100.00, діє 30 днів |
+| `EXPIRED25` | бонус 25.00, **прострочений** (для демо помилки) |
 
-## Laravel Sponsors
+## API
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Всі суми — integer у мінорних одиницях (`*_cents`). Помилки: `{message, error_code}`.
 
-### Premium Partners
+| Метод | Шлях | Опис |
+|---|---|---|
+| POST | `/api/auth/login` | Bearer-токен за email+password |
+| GET | `/api/me` | Поточний гравець + баланс |
+| POST | `/api/promo/claim` | Тікет 1: нарахувати бонус за кодом (422 формат / 404 `PROMO_NOT_FOUND` / 409 `PROMO_EXPIRED`, `PROMO_ALREADY_USED`) |
+| GET | `/api/promo/history` | Тікет 1: історія з пагінацією та фільтром `status=applied\|rejected\|revoked` |
+| PATCH | `/api/promo/{claimId}/revoke` | Тікет 2: скасувати нарахування (повторно — 409 `CLAIM_ALREADY_REVOKED`, кошти не списуються вдвічі) |
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+## Гарантії коректності (акцент ТЗ)
 
-## Contributing
+- Гроші — тільки integer-центи; кожна зміна балансу — в транзакції + рядок у append-only ledger (`wallet_transactions`); інваріант `SUM(ledger) == balance` покритий тестами.
+- Подвійне нарахування неможливе: лок рядка гравця → locking read перевірки дубля → `UNIQUE(user_id, promo_code_id)` як фінальний рубіж.
+- Подвійне списання неможливе: умовний `UPDATE ... WHERE status='applied'` з перевіркою affected rows.
+- Гравець визначається виключно з токена; чужі claim'и — 404 без розкриття існування.
+- Деталі: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Тести
 
-## Code of Conduct
+```bash
+php artisan test
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Матриця крайніх випадків (C1–C10, H1–H4, R1–R7) — у [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
 
-## Security Vulnerabilities
+## Структура документації
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+- [docs/TASK.md](docs/TASK.md) — оригінальне ТЗ
+- [docs/PROJECT.md](docs/PROJECT.md) — скоуп, ризики, deliverables
+- [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) — контракт помилок, доменні рішення, матриця тестів
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — схема БД, стратегія конкурентності
+- [docs/ROADMAP.md](docs/ROADMAP.md) — етапи та план комітів
+- [docs/PROMPTS_LOG.md](docs/PROMPTS_LOG.md) — лог роботи з AI (deliverable)
+- [docs/CODE_REVIEW.md](docs/CODE_REVIEW.md) — Частина 2: рев'ю коду (deliverable)
