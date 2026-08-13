@@ -60,11 +60,14 @@ it('revokes the token on logout so it stops working', function () {
     getJson('/api/me', $headers)->assertUnauthorized();
 });
 
-it('replaces previous spa tokens on re-login instead of piling them up', function () {
+it('keeps other device sessions alive on re-login (multi-device)', function () {
     $user = User::factory()->create(['email' => 'p1@test.dev']);
 
-    postJson('/api/auth/login', ['email' => 'p1@test.dev', 'password' => 'password'])->assertOk();
+    $first = postJson('/api/auth/login', ['email' => 'p1@test.dev', 'password' => 'password'])
+        ->assertOk()->json('token');
     postJson('/api/auth/login', ['email' => 'p1@test.dev', 'password' => 'password'])->assertOk();
 
-    expect($user->tokens()->where('name', 'spa')->count())->toBe(1);
+    // Перший пристрій не розлогінено другим входом
+    getJson('/api/me', ['Authorization' => "Bearer $first"])->assertOk();
+    expect($user->tokens()->where('name', 'spa')->count())->toBe(2);
 });

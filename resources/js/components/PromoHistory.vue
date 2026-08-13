@@ -2,6 +2,7 @@
 import { nextTick, onMounted, ref, watch } from 'vue';
 import api, { errorMessage } from '../api';
 import { money, dateTime } from '../format';
+import AppIcon from './AppIcon.vue';
 
 const emit = defineEmits(['balance-changed']);
 
@@ -10,7 +11,6 @@ const meta = ref(null);
 const page = ref(1);
 const statusFilter = ref('');
 const loading = ref(false);
-const loadedOnce = ref(false);
 const error = ref(null);
 
 // Тікет 2: скасування з підтвердженням
@@ -28,6 +28,18 @@ const FILTERS = [
     { value: 'rejected', label: 'Відхилені' },
     { value: 'revoked', label: 'Скасовані' },
 ];
+
+const STATUS_ICONS = {
+    applied: 'check',
+    rejected: 'x',
+    revoked: 'undo',
+};
+
+const STATUS_ICON_WRAP = {
+    applied: 'bg-mint-deep/60 text-mint',
+    rejected: 'bg-danger-deep/60 text-danger',
+    revoked: 'bg-card-2 text-ink-faint',
+};
 
 const STATUS_BADGES = {
     applied: 'bg-mint-deep/60 text-mint',
@@ -47,35 +59,77 @@ const REASON_LABELS = {
     already_used: 'код уже використано',
 };
 
-// Лічильник запитів: відповідь, що прийшла після новішого запиту
-// (швидке перемикання фільтрів/сторінок), ігнорується
+/**
+ * SWR-кеш сторінок історії: перемикання фільтрів/сторінок показує
+ * закешовані дані миттєво і тихо ревалідовує у фоні. Після першого
+ * завантаження решта фільтрів префетчиться — таби відчуваються інстант.
+ */
+const cache = new Map(); // `${status}|${page}` -> { data, meta }
+let prefetched = false;
 let loadSeq = 0;
+
+const cacheKey = () => `${statusFilter.value}|${page.value}`;
+
+function historyParams(status, pageNumber) {
+    return { page: pageNumber, ...(status ? { status } : {}) };
+}
 
 async function load() {
     const seq = ++loadSeq;
-    loading.value = true;
+    const key = cacheKey();
+    const cached = cache.get(key);
+
     error.value = null;
     revokeError.value = null;
     revokeSuccess.value = null;
+
+    if (cached) {
+        // Миттєвий показ; свіжа версія доїде тихо
+        claims.value = cached.data;
+        meta.value = cached.meta;
+    } else {
+        claims.value = [];
+        loading.value = true;
+    }
+
     try {
         const { data } = await api.get('/promo/history', {
-            params: {
-                page: page.value,
-                ...(statusFilter.value ? { status: statusFilter.value } : {}),
-            },
+            params: historyParams(statusFilter.value, page.value),
         });
+        cache.set(key, { data: data.data, meta: data.meta });
         if (seq !== loadSeq) return;
         claims.value = data.data;
         meta.value = data.meta;
+        prefetchFilters();
     } catch (e) {
         if (seq !== loadSeq) return;
-        error.value = errorMessage(e);
+        if (!cached) {
+            error.value = errorMessage(e);
+        }
     } finally {
         if (seq === loadSeq) {
             loading.value = false;
-            loadedOnce.value = true;
         }
     }
+}
+
+function prefetchFilters() {
+    if (prefetched) return;
+    prefetched = true;
+    for (const filter of FILTERS) {
+        const key = `${filter.value}|1`;
+        if (cache.has(key)) continue;
+        api.get('/promo/history', { params: historyParams(filter.value, 1) })
+            .then(({ data }) => cache.set(key, { data: data.data, meta: data.meta }))
+            .catch(() => {}); // префетч — best effort
+    }
+}
+
+/** Дані змінилися (claim/revoke) — кеш недійсний. */
+function reload() {
+    cache.clear();
+    prefetched = false;
+    return load();
 }
 
 watch(statusFilter, () => {
@@ -89,7 +143,7 @@ watch(page, load);
 
 onMounted(load);
 
-defineExpose({ reload: load });
+defineExpose({ reload });
 
 function askRevoke(claim) {
     revokeError.value = null;
@@ -124,7 +178,7 @@ async function confirmRevoke() {
         emit('balance-changed');
     } finally {
         revokingId.value = null;
-        await load(); // статус і список — з сервера, не з припущень клієнта
+        await reload(); // статус і список — з сервера, не з припущень клієнта
         revokeError.value = failure;
         revokeSuccess.value = success;
         if (success) {
@@ -138,11 +192,11 @@ async function confirmRevoke() {
 </script>
 
 <template>
-    <section class="rounded-2xl border border-line-soft bg-card p-5 sm:p-6">
+    <section class="card-surface p-5 sm:p-6">
         <div class="flex flex-wrap items-center justify-between gap-3">
             <h2 class="text-base font-semibold tracking-tight">Історія промокодів</h2>
 
-            <div class="flex gap-0.5 rounded-lg bg-card-2 p-1" role="tablist" aria-label="Фільтр за статусом">
+            <div class="flex gap-0.5 rounded-lg border border-line-soft bg-card-2/70 p-1" role="tablist" aria-label="Фільтр за статусом">
                 <button
                     v-for="filter in FILTERS"
                     :key="filter.value"
@@ -161,19 +215,29 @@ async function confirmRevoke() {
         </div>
 
         <Transition name="pop">
-            <p v-if="error" role="alert" class="mt-4 rounded-lg border border-danger-deep bg-danger-deep/40 px-3.5 py-2.5 text-sm text-danger">{{ error }}</p>
+            <p v-if="error" role="alert" class="mt-4 flex items-start gap-2.5 rounded-lg border border-danger-deep bg-danger-deep/40 px-3.5 py-2.5 text-sm text-danger">
+                <AppIcon name="alert" class="mt-0.5 size-4 shrink-0" />
+                <span>{{ error }}</span>
+            </p>
         </Transition>
         <Transition name="pop">
-            <p v-if="revokeError" role="alert" class="mt-4 rounded-lg border border-danger-deep bg-danger-deep/40 px-3.5 py-2.5 text-sm text-danger">{{ revokeError }}</p>
+            <p v-if="revokeError" role="alert" class="mt-4 flex items-start gap-2.5 rounded-lg border border-danger-deep bg-danger-deep/40 px-3.5 py-2.5 text-sm text-danger">
+                <AppIcon name="alert" class="mt-0.5 size-4 shrink-0" />
+                <span>{{ revokeError }}</span>
+            </p>
         </Transition>
         <Transition name="pop">
-            <p v-if="revokeSuccess" role="status" class="mt-4 rounded-lg border border-mint-deep bg-mint-deep/40 px-3.5 py-2.5 text-sm text-mint">{{ revokeSuccess }}</p>
+            <p v-if="revokeSuccess" role="status" class="mt-4 flex items-start gap-2.5 rounded-lg border border-mint-deep bg-mint-deep/40 px-3.5 py-2.5 text-sm text-mint">
+                <AppIcon name="check-circle" class="mt-0.5 size-4 shrink-0" />
+                <span>{{ revokeSuccess }}</span>
+            </p>
         </Transition>
 
-        <!-- Скелет першого завантаження: без стрибків макета -->
-        <div v-if="!loadedOnce && loading" class="mt-4 space-y-3" aria-hidden="true">
-            <div v-for="i in 3" :key="i" class="flex animate-pulse items-center justify-between py-2">
-                <div class="space-y-2">
+        <!-- Скелет: тільки коли для цього фільтра ще немає даних -->
+        <div v-if="loading && claims.length === 0" class="mt-4 space-y-3" aria-hidden="true">
+            <div v-for="i in 3" :key="i" class="flex animate-pulse items-center gap-3 py-2">
+                <div class="size-9 rounded-full bg-card-2" />
+                <div class="flex-1 space-y-2">
                     <div class="h-4 w-36 rounded bg-card-2" />
                     <div class="h-3 w-24 rounded bg-card-2" />
                 </div>
@@ -181,22 +245,35 @@ async function confirmRevoke() {
             </div>
         </div>
 
-        <p
+        <div
             v-else-if="!error && !loading && claims.length === 0"
-            class="mt-8 mb-4 text-center text-sm text-ink-faint"
+            class="mt-2 py-8 text-center"
         >
-            {{ statusFilter
-                ? 'За цим фільтром поки що нічого немає.'
-                : 'Введіть промокод у формі вище — нарахування і всі спроби з’являться тут.' }}
-        </p>
+            <span class="mx-auto grid size-12 place-items-center rounded-full bg-card-2 text-ink-faint">
+                <AppIcon name="ticket" class="size-5" />
+            </span>
+            <p class="mt-3 text-sm text-ink-faint">
+                {{ statusFilter
+                    ? 'За цим фільтром поки що нічого немає.'
+                    : 'Введіть промокод у формі вище — нарахування і всі спроби з’являться тут.' }}
+            </p>
+        </div>
 
-        <ul v-if="claims.length > 0" class="mt-3 divide-y divide-line-soft transition-opacity duration-150" :class="{ 'opacity-60': loading }">
+        <ul v-if="claims.length > 0" class="mt-3 divide-y divide-line-soft">
             <li
                 v-for="claim in claims"
                 :key="claim.id"
-                class="flex flex-wrap items-center justify-between gap-3 py-3"
+                class="flex flex-wrap items-center gap-3 py-3"
             >
-                <div class="min-w-0">
+                <span
+                    class="grid size-9 shrink-0 place-items-center rounded-full"
+                    :class="STATUS_ICON_WRAP[claim.status]"
+                    aria-hidden="true"
+                >
+                    <AppIcon :name="STATUS_ICONS[claim.status]" class="size-4" />
+                </span>
+
+                <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">
                         <span class="font-mono text-sm font-semibold tracking-wide">{{ claim.code }}</span>
                         <span
@@ -206,7 +283,7 @@ async function confirmRevoke() {
                             {{ STATUS_LABELS[claim.status] }}
                         </span>
                     </div>
-                    <p class="mt-1 text-xs text-ink-faint">
+                    <p class="mt-0.5 text-xs text-ink-faint">
                         {{ dateTime(claim.created_at) }}
                         <template v-if="claim.reject_reason"> · {{ REASON_LABELS[claim.reject_reason] }}</template>
                         <template v-if="claim.revoked_at"> · скасовано {{ dateTime(claim.revoked_at) }}</template>
@@ -247,19 +324,21 @@ async function confirmRevoke() {
             <button
                 type="button"
                 :disabled="page <= 1 || loading"
-                class="pressable focus-ring min-h-10 rounded-lg border border-line px-3.5 text-ink-soft transition-colors duration-150 hover:bg-card-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+                class="pressable focus-ring inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-line px-3.5 text-ink-soft transition-colors duration-150 hover:bg-card-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
                 @click="page--"
             >
-                ← Назад
+                <AppIcon name="chevron-left" class="size-4" />
+                Назад
             </button>
             <span class="text-ink-faint tabular-nums">Сторінка {{ meta.current_page }} з {{ meta.last_page }}</span>
             <button
                 type="button"
                 :disabled="page >= meta.last_page || loading"
-                class="pressable focus-ring min-h-10 rounded-lg border border-line px-3.5 text-ink-soft transition-colors duration-150 hover:bg-card-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+                class="pressable focus-ring inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-line px-3.5 text-ink-soft transition-colors duration-150 hover:bg-card-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
                 @click="page++"
             >
-                Далі →
+                Далі
+                <AppIcon name="chevron-right" class="size-4" />
             </button>
         </div>
 
@@ -277,8 +356,11 @@ async function confirmRevoke() {
                     @click.self="revokeTarget = null"
                     @keydown.esc="revokeTarget = null"
                 >
-                    <div class="modal-panel w-full max-w-sm rounded-2xl border border-line bg-card p-6">
-                        <h3 id="revoke-modal-title" class="text-base font-semibold tracking-tight">Скасувати нарахування?</h3>
+                    <div class="modal-panel w-full max-w-sm rounded-2xl bg-card-2 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_24px_48px_rgba(0,0,0,0.55)]">
+                        <span class="grid size-10 place-items-center rounded-full bg-danger-deep/60 text-danger">
+                            <AppIcon name="undo" class="size-5" />
+                        </span>
+                        <h3 id="revoke-modal-title" class="mt-4 text-base font-semibold tracking-tight">Скасувати нарахування?</h3>
                         <p class="mt-2 text-sm leading-relaxed text-ink-soft">
                             Бонус <strong class="text-ink tabular-nums">+{{ money(revokeTarget.amount_cents) }}</strong> за кодом
                             <span class="font-mono font-semibold text-ink">{{ revokeTarget.code }}</span>
@@ -287,7 +369,7 @@ async function confirmRevoke() {
                         <div class="mt-6 flex justify-end gap-2">
                             <button
                                 type="button"
-                                class="pressable focus-ring min-h-10 rounded-lg border border-line px-4 text-sm font-medium text-ink-soft transition-colors duration-150 hover:bg-card-2 hover:text-ink"
+                                class="pressable focus-ring min-h-10 rounded-lg border border-line px-4 text-sm font-medium text-ink-soft transition-colors duration-150 hover:bg-card hover:text-ink"
                                 @click="revokeTarget = null"
                             >
                                 Залишити

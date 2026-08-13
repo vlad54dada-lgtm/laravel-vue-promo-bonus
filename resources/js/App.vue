@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref, watch } from 'vue';
 import api, { clearToken, hasToken } from './api';
 import { money } from './format';
+import AppIcon from './components/AppIcon.vue';
 import LoginForm from './components/LoginForm.vue';
 import PromoClaimForm from './components/PromoClaimForm.vue';
 import PromoHistory from './components/PromoHistory.vue';
@@ -119,27 +120,40 @@ onUnmounted(() => {
         <Transition v-else name="screen" mode="out-in">
             <LoginForm v-if="!user" key="login" @logged-in="onLoggedIn" />
 
-            <div v-else key="app" class="mx-auto max-w-2xl px-4 py-6 sm:py-10">
-                <header class="mb-8 flex items-end justify-between gap-4">
-                    <div>
-                        <p class="text-sm font-medium text-ink-faint">{{ user.name }}</p>
-                        <p class="mt-1 flex items-baseline gap-2">
-                            <span class="text-[2rem] leading-none font-bold tracking-tight tabular-nums">
-                                {{ money(displayBalance) }}
-                            </span>
-                            <span class="text-sm font-medium text-ink-soft">баланс</span>
-                        </p>
+            <div v-else key="app" class="mx-auto max-w-2xl px-4 py-5 sm:py-8">
+                <header class="mb-5 flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <span class="grid size-8 place-items-center rounded-lg bg-mint-deep/70 text-mint">
+                            <AppIcon name="ticket" class="size-4" />
+                        </span>
+                        <span class="text-[15px] font-semibold tracking-tight">Promo Bonus</span>
                     </div>
-                    <button
-                        type="button"
-                        class="pressable focus-ring min-h-11 rounded-lg border border-line px-4 text-sm font-medium text-ink-soft transition-colors duration-150 hover:border-line hover:bg-card hover:text-ink"
-                        @click="logout"
-                    >
-                        Вийти
-                    </button>
+                    <div class="flex items-center gap-3">
+                        <span class="hidden text-sm text-ink-soft sm:block">{{ user.name }}</span>
+                        <button
+                            type="button"
+                            class="pressable focus-ring inline-flex min-h-10 items-center gap-2 rounded-lg border border-line px-3.5 text-sm font-medium text-ink-soft transition-colors duration-150 hover:bg-card hover:text-ink"
+                            @click="logout"
+                        >
+                            <AppIcon name="log-out" class="size-4" />
+                            Вийти
+                        </button>
+                    </div>
                 </header>
 
                 <main class="space-y-4">
+                    <!-- Wallet: баланс — головна цифра екрана -->
+                    <section class="card-surface relative overflow-hidden p-5 sm:p-6">
+                        <div
+                            class="pointer-events-none absolute -top-24 -right-12 size-56 rounded-full bg-mint opacity-[0.13] blur-3xl"
+                            aria-hidden="true"
+                        />
+                        <p class="text-[13px] font-medium text-ink-faint">Баланс гравця</p>
+                        <p class="mt-1 text-4xl leading-none font-bold tracking-tight tabular-nums">
+                            {{ money(displayBalance) }}
+                        </p>
+                    </section>
+
                     <PromoClaimForm @claimed="onClaimed" />
                     <PromoHistory ref="history" @balance-changed="onBalanceChanged" />
                 </main>

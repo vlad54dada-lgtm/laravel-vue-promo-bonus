@@ -2,6 +2,7 @@
 import { computed, onUnmounted, ref } from 'vue';
 import api, { errorMessage } from '../api';
 import { money } from '../format';
+import AppIcon from './AppIcon.vue';
 
 const emit = defineEmits(['claimed']);
 
@@ -66,28 +67,34 @@ async function submit() {
 </script>
 
 <template>
-    <section class="rounded-2xl border border-line-soft bg-card p-5 sm:p-6">
+    <section class="card-surface p-5 sm:p-6">
         <h2 class="text-base font-semibold tracking-tight">Застосувати промокод</h2>
 
         <form class="mt-4 flex flex-col gap-2.5 sm:flex-row" @submit.prevent="submit">
             <label for="promo-code" class="sr-only">Промокод</label>
-            <input
-                id="promo-code"
-                v-model.trim="code"
-                type="text"
-                placeholder="Наприклад, WELCOME50"
-                maxlength="12"
-                autocomplete="off"
-                spellcheck="false"
-                :disabled="loading"
-                :aria-invalid="clientHint ? 'true' : undefined"
-                :aria-describedby="clientHint ? 'promo-code-hint' : undefined"
-                class="focus-ring min-h-11 flex-1 rounded-lg border border-line bg-canvas px-3.5 font-mono text-sm tracking-[0.08em] text-ink uppercase transition-colors duration-150 placeholder:normal-case placeholder:font-sans placeholder:tracking-normal placeholder:text-ink-faint focus:border-mint disabled:opacity-60"
-            />
+            <div class="relative flex-1">
+                <AppIcon
+                    name="ticket"
+                    class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ink-faint"
+                />
+                <input
+                    id="promo-code"
+                    v-model.trim="code"
+                    type="text"
+                    placeholder="Наприклад, WELCOME50"
+                    maxlength="12"
+                    autocomplete="off"
+                    spellcheck="false"
+                    :disabled="loading"
+                    :aria-invalid="clientHint ? 'true' : undefined"
+                    :aria-describedby="clientHint ? 'promo-code-hint' : undefined"
+                    class="focus-ring min-h-11 w-full rounded-lg border border-line bg-canvas pr-3.5 pl-10 font-mono text-sm tracking-[0.08em] text-ink uppercase transition-colors duration-150 placeholder:normal-case placeholder:font-sans placeholder:tracking-normal placeholder:text-ink-faint focus:border-mint disabled:opacity-60"
+                />
+            </div>
             <button
                 type="submit"
                 :disabled="loading || !code"
-                class="pressable focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-mint px-6 text-sm font-semibold text-mint-ink transition-[background-color,opacity] duration-150 hover:bg-mint-soft disabled:cursor-not-allowed disabled:opacity-45"
+                class="pressable focus-ring btn-glow inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-mint px-6 text-sm font-semibold text-mint-ink transition-[background-color,opacity] duration-150 hover:bg-mint-soft disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none"
             >
                 <svg v-if="loading" class="spin-fast size-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
@@ -108,19 +115,23 @@ async function submit() {
                 v-if="state === 'success'"
                 key="success"
                 role="status"
-                class="mt-3 rounded-lg border border-mint-deep bg-mint-deep/40 px-3.5 py-2.5 text-sm text-mint"
+                class="mt-3 flex items-start gap-2.5 rounded-lg border border-mint-deep bg-mint-deep/40 px-3.5 py-2.5 text-sm text-mint"
             >
-                Бонус <strong class="tabular-nums">+{{ money(lastBonus) }}</strong> нараховано.
-                Новий баланс: <strong class="tabular-nums">{{ money(lastBalance) }}</strong>
+                <AppIcon name="check-circle" class="mt-0.5 size-4 shrink-0" />
+                <span>
+                    Бонус <strong class="tabular-nums">+{{ money(lastBonus) }}</strong> нараховано.
+                    Новий баланс: <strong class="tabular-nums">{{ money(lastBalance) }}</strong>
+                </span>
             </p>
 
             <p
                 v-else-if="state === 'error'"
                 key="error"
                 role="alert"
-                class="mt-3 rounded-lg border border-danger-deep bg-danger-deep/40 px-3.5 py-2.5 text-sm text-danger"
+                class="mt-3 flex items-start gap-2.5 rounded-lg border border-danger-deep bg-danger-deep/40 px-3.5 py-2.5 text-sm text-danger"
             >
-                {{ error }}
+                <AppIcon name="alert" class="mt-0.5 size-4 shrink-0" />
+                <span>{{ error }}</span>
             </p>
         </Transition>
     </section>

@@ -30,9 +30,9 @@ class AuthController extends Controller
             ]);
         }
 
-        // Не накопичуємо вічно валідні токени від повторних логінів
-        $user->tokens()->where('name', 'spa')->delete();
-
+        // Мультидевайс — норма: логін НЕ відкликає інші сесії гравця.
+        // Від накопичення токенів захищає expiration (24 год) + logout;
+        // прострочені чистить sanctum:prune-expired.
         return response()->json([
             'token' => $user->createToken('spa')->plainTextToken,
             'user' => [

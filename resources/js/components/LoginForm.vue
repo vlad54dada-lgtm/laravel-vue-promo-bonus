@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 import api, { setToken, errorMessage } from '../api';
+import AppIcon from './AppIcon.vue';
 
 const emit = defineEmits(['logged-in']);
 
@@ -33,9 +34,14 @@ async function submit() {
 <template>
     <div class="flex min-h-dvh items-center justify-center px-4">
         <div class="w-full max-w-sm">
-            <p class="mb-6 text-center text-lg font-semibold tracking-tight text-ink">Promo Bonus</p>
+            <p class="mb-6 flex items-center justify-center gap-2.5">
+                <span class="grid size-9 place-items-center rounded-xl bg-mint-deep/70 text-mint">
+                    <AppIcon name="ticket" class="size-4.5" />
+                </span>
+                <span class="text-lg font-semibold tracking-tight text-ink">Promo Bonus</span>
+            </p>
 
-            <div class="rounded-2xl border border-line-soft bg-card p-7">
+            <div class="card-surface p-7">
                 <h1 class="text-xl font-semibold tracking-tight">Вхід гравця</h1>
                 <p class="mt-1.5 text-sm text-ink-soft">
                     Демо-акаунт:
@@ -81,7 +87,7 @@ async function submit() {
                     <button
                         type="submit"
                         :disabled="loading"
-                        class="pressable focus-ring min-h-11 w-full rounded-lg bg-mint text-sm font-semibold text-mint-ink transition-[background-color,opacity] duration-150 hover:bg-mint-soft disabled:cursor-not-allowed disabled:opacity-45"
+                        class="pressable focus-ring btn-glow min-h-11 w-full rounded-lg bg-mint text-sm font-semibold text-mint-ink transition-[background-color,opacity] duration-150 hover:bg-mint-soft disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none"
                     >
                         {{ loading ? 'Входимо…' : 'Увійти' }}
                     </button>

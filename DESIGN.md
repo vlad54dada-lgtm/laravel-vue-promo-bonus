@@ -42,9 +42,18 @@
 
 Правила: рух передає стан, не прикрашає; exit швидший за enter; жодних оркестрованих завантажень (скелетони замість хореографії); видимість контенту ніколи не гейтиться анімацією. `prefers-reduced-motion`: рух → 1ms/вимкнено, opacity-зміни лишаються.
 
+## Perceived speed
+
+Історія — SWR-кеш сторінок (`${status}|${page}`): перемикання фільтрів/сторінок показує кеш миттєво (5–10ms до оновленого DOM) і тихо ревалідовує у фоні; після першого завантаження решта фільтрів префетчиться. Скелетон — лише коли для ключа ще немає даних. Після claim/revoke кеш інвалідовується повністю.
+
+## Iconography
+
+Одна сім'я інлайн-SVG (Lucide-геометрія, stroke 2, round): ticket (бренд, інпут, порожній стан), check/x/undo (статуси в колах-підложках), chevrons (пагінація), log-out, check-circle/alert (повідомлення). Жодних emoji в ролі іконок.
+
 ## Components
 
-- **Кнопки**: primary (mint, mint-ink текст), ghost (border-line), danger-ghost (revoke), danger-solid (підтвердження в модалці). Всі: `.pressable .focus-ring`, min-h 10–11, повний словник станів (hover/focus-visible/active/disabled/loading).
+- **Поверхні**: `.card-surface` — 1px бордер + ледь помітний вертикальний тон + верхній inset-highlight (без ghost-card: жодних широких тіней поруч із бордером). Wallet-картка балансу — з м'яким mint-glow орбом. Модалка — без бордера, глибока тінь + inset-highlight, поверхня card-2.
+- **Кнопки**: primary (mint, mint-ink текст, `.btn-glow`), ghost (border-line), danger-ghost (revoke), danger-solid (підтвердження в модалці). Всі: `.pressable .focus-ring`, min-h 10–11, повний словник станів (hover/focus-visible/active/disabled/loading).
 - **Поля**: bg-canvas на card, border-line → border-mint на фокус, focus-ring.
 - **Бейджі статусів**: mint-deep/mint (applied), danger-deep/danger (rejected), card-2/ink-faint (revoked).
 - **Сегмент-контрол фільтрів**: контейнер card-2, активний таб — «втиснутий» canvas.

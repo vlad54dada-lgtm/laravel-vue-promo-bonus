@@ -45,6 +45,15 @@ body {
     color: var(--color-ink);
 }
 
+/* Легка віньєтка згори: глибина сцени без смуг і градієнтного шуму */
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(640px 320px at 50% -80px, oklch(0.87 0.17 162 / 0.06), transparent 70%);
+}
+
 ::selection {
     background-color: var(--color-mint);
     color: var(--color-mint-ink);
@@ -69,6 +78,20 @@ body {
     .focus-ring:focus-visible {
         outline: 2px solid var(--color-mint);
         outline-offset: 2px;
+    }
+
+    /* Поверхня картки: ледь помітний вертикальний тон + верхній highlight.
+       Глибина без ghost-card (жодних широких тіней поруч із бордером). */
+    .card-surface {
+        border: 1px solid var(--color-line-soft);
+        border-radius: 1rem;
+        background: linear-gradient(180deg, oklch(0.215 0.014 260), oklch(0.198 0.014 260));
+        box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.04);
+    }
+
+    /* Primary-кнопка: м'яке світіння без бордера */
+    .btn-glow {
+        box-shadow: 0 2px 8px oklch(0.87 0.17 162 / 0.25);
     }
 }
 
