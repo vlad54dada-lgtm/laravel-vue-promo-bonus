@@ -66,4 +66,3 @@ php artisan test
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — схема БД, стратегія конкурентності
 - [docs/ROADMAP.md](docs/ROADMAP.md) — етапи та план комітів
 - [docs/PROMPTS_LOG.md](docs/PROMPTS_LOG.md) — лог роботи з AI (deliverable)
-- [docs/CODE_REVIEW.md](docs/CODE_REVIEW.md) — Частина 2: рев'ю коду (deliverable)
