@@ -30,6 +30,20 @@ class PromoController extends Controller
     }
 
     /**
+     * PATCH /api/promo/{claimId}/revoke — Тікет 2.
+     * Скасовує нарахування і списує суму; повторний виклик — 409.
+     */
+    public function revoke(Request $request, int $claimId, PromoService $service): JsonResponse
+    {
+        $claim = $service->revoke($request->user(), $claimId);
+
+        return response()->json([
+            'balance_cents' => $request->user()->refresh()->balance_cents,
+            'claim' => PromoClaimResource::make($claim),
+        ]);
+    }
+
+    /**
      * GET /api/promo/history — Тікет 1.
      * Пагінація + фільтр за статусом; тільки записи поточного гравця.
      */

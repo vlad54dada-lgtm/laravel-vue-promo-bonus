@@ -5,6 +5,9 @@ namespace App\Services;
 use App\Enums\PromoClaimStatus;
 use App\Enums\PromoRejectReason;
 use App\Enums\WalletTransactionType;
+use App\Exceptions\ClaimAlreadyRevokedException;
+use App\Exceptions\ClaimNotFoundException;
+use App\Exceptions\ClaimNotRevocableException;
 use App\Exceptions\PromoAlreadyUsedException;
 use App\Exceptions\PromoExpiredException;
 use App\Exceptions\PromoNotFoundException;
@@ -93,6 +96,68 @@ class PromoService
             $this->recordRejection($user, $code, PromoRejectReason::AlreadyUsed);
             throw new PromoAlreadyUsedException;
         }
+    }
+
+    /**
+     * Скасувати раніше нараховане бонусне нарахування (Тікет 2).
+     *
+     * Повторний виклик на вже скасованому — 409, кошти не списуються вдруге.
+     * Чужий або неіснуючий claim — 404 (існування чужих записів не розкриваємо).
+     *
+     * @throws ClaimNotFoundException
+     * @throws ClaimAlreadyRevokedException
+     * @throws ClaimNotRevocableException
+     */
+    public function revoke(User $user, int $claimId): PromoClaim
+    {
+        return DB::transaction(function () use ($user, $claimId): PromoClaim {
+            // Той самий порядок локів, що й у claim: user → promo_claims
+            $lockedUser = User::query()
+                ->whereKey($user->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $claim = PromoClaim::query()
+                ->whereKey($claimId)
+                ->where('user_id', $lockedUser->getKey())
+                ->lockForUpdate()
+                ->first();
+
+            if ($claim === null) {
+                throw new ClaimNotFoundException;
+            }
+
+            if ($claim->status === PromoClaimStatus::Revoked) {
+                throw new ClaimAlreadyRevokedException;
+            }
+
+            if ($claim->status !== PromoClaimStatus::Applied) {
+                throw new ClaimNotRevocableException;
+            }
+
+            // СУБД-незалежний рубіж від подвійного списання: умовний UPDATE.
+            // 0 affected rows = статус уже змінив конкурент → нічого не списуємо.
+            $updated = PromoClaim::query()
+                ->whereKey($claim->getKey())
+                ->where('status', PromoClaimStatus::Applied->value)
+                ->update([
+                    'status' => PromoClaimStatus::Revoked->value,
+                    'revoked_at' => now(),
+                ]);
+
+            if ($updated === 0) {
+                throw new ClaimAlreadyRevokedException;
+            }
+
+            $this->applyBalanceChange(
+                $lockedUser,
+                $claim,
+                -$claim->amount_cents,
+                WalletTransactionType::PromoRevoke,
+            );
+
+            return $claim->refresh();
+        });
     }
 
     /**

@@ -14,4 +14,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/promo/claim', [PromoController::class, 'claim'])
         ->middleware('throttle:10,1'); // захист від перебору кодів
     Route::get('/promo/history', [PromoController::class, 'history']);
+
+    // Тікет 2
+    Route::patch('/promo/{claimId}/revoke', [PromoController::class, 'revoke'])
+        ->whereNumber('claimId');
 });
