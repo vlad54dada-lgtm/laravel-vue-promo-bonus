@@ -9,4 +9,158 @@
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* Темна restrained-палітра: майже чорні нейтрали + один м'ятний акцент
+       (гроші/CTA) + червоний тільки для деструктивного. OKLCH. */
+    --color-canvas: oklch(0.16 0.012 260);
+    --color-card: oklch(0.205 0.014 260);
+    --color-card-2: oklch(0.25 0.016 260);
+    --color-line: oklch(0.32 0.015 260);
+    --color-line-soft: oklch(0.27 0.014 260);
+    --color-ink: oklch(0.95 0.005 260);
+    --color-ink-soft: oklch(0.75 0.012 260);
+    --color-ink-faint: oklch(0.63 0.014 260);
+
+    --color-mint: oklch(0.87 0.17 162);
+    --color-mint-soft: oklch(0.8 0.14 162);
+    --color-mint-deep: oklch(0.3 0.06 162);
+    --color-mint-ink: oklch(0.2 0.05 162);
+
+    --color-danger: oklch(0.72 0.17 25);
+    --color-danger-strong: oklch(0.58 0.2 25);
+    --color-danger-deep: oklch(0.27 0.08 25);
+    --color-warn: oklch(0.83 0.13 85);
+
+    /* Сильні криві: вбудовані css-easing надто мляві */
+    --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+html {
+    color-scheme: dark;
+}
+
+body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+}
+
+::selection {
+    background-color: var(--color-mint);
+    color: var(--color-mint-ink);
+}
+
+/* ---- Словник компонентних станів ---- */
+
+@layer components {
+    /* Press-feedback: кожен натискний елемент відповідає на дотик */
+    .pressable {
+        transition: transform 140ms var(--ease-out-strong);
+    }
+
+    .pressable:active:not(:disabled) {
+        transform: scale(0.97);
+    }
+
+    .focus-ring {
+        outline: none;
+    }
+
+    .focus-ring:focus-visible {
+        outline: 2px solid var(--color-mint);
+        outline-offset: 2px;
+    }
+}
+
+/* ---- Анімації станів (Vue <Transition>) ---- */
+
+/* Кросфейд екранів логін ↔ кабінет */
+.screen-enter-active {
+    transition: opacity 200ms var(--ease-out-strong);
+}
+.screen-leave-active {
+    transition: opacity 130ms ease;
+}
+.screen-enter-from,
+.screen-leave-to {
+    opacity: 0;
+}
+
+/* Повідомлення success / error: з'являються з легким рухом, зникають швидше */
+.pop-enter-active {
+    transition: opacity 200ms var(--ease-out-strong), transform 200ms var(--ease-out-strong);
+}
+.pop-leave-active {
+    transition: opacity 130ms ease;
+}
+.pop-enter-from {
+    opacity: 0;
+    transform: translateY(-4px);
+}
+.pop-leave-to {
+    opacity: 0;
+}
+
+/* Модалка: сцим — фейд; панель масштабується від 0.96 (ніколи від нуля) */
+.modal-enter-active {
+    transition: opacity 160ms var(--ease-out-strong);
+}
+.modal-leave-active {
+    transition: opacity 130ms ease;
+}
+.modal-enter-from,
+.modal-leave-to {
+    opacity: 0;
+}
+.modal-enter-active .modal-panel {
+    transition: transform 200ms var(--ease-out-strong);
+}
+.modal-leave-active .modal-panel {
+    transition: transform 130ms ease;
+}
+.modal-enter-from .modal-panel {
+    transform: scale(0.96) translateY(8px);
+}
+.modal-leave-to .modal-panel {
+    transform: scale(0.98);
+}
+
+/* Спінер: швидший оберт = швидше відчуття завантаження */
+@keyframes spin-fast {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.spin-fast {
+    animation: spin-fast 600ms linear infinite;
+}
+
+/* ---- Reduced motion: рух вимикається, стани лишаються зрозумілими ---- */
+@media (prefers-reduced-motion: reduce) {
+    .pressable,
+    .pressable:active:not(:disabled) {
+        transition: none;
+        transform: none;
+    }
+
+    .screen-enter-active,
+    .screen-leave-active,
+    .pop-enter-active,
+    .pop-leave-active,
+    .modal-enter-active,
+    .modal-leave-active,
+    .modal-enter-active .modal-panel,
+    .modal-leave-active .modal-panel {
+        transition-duration: 1ms;
+    }
+
+    .modal-enter-from .modal-panel,
+    .modal-leave-to .modal-panel {
+        transform: none;
+    }
+
+    .pop-enter-from {
+        transform: none;
+    }
 }

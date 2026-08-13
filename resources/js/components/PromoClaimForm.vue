@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onUnmounted, ref } from 'vue';
 import api, { errorMessage } from '../api';
 import { money } from '../format';
 
@@ -11,6 +11,22 @@ const state = ref('idle');
 const error = ref(null);
 const lastBonus = ref(null);
 const lastBalance = ref(null);
+
+// Success зникає сам (5s): цифра балансу в повідомленні не повинна
+// пережити наступні операції і почати суперечити шапці.
+// Error лишається, доки гравець не почне виправляти — причину треба встигнути прочитати.
+let successTimer = null;
+
+function scheduleSuccessDismiss() {
+    clearTimeout(successTimer);
+    successTimer = setTimeout(() => {
+        if (state.value === 'success') {
+            state.value = 'idle';
+        }
+    }, 5000);
+}
+
+onUnmounted(() => clearTimeout(successTimer));
 
 const CODE_PATTERN = /^[A-Za-z0-9]{6,12}$/;
 
@@ -39,6 +55,7 @@ async function submit() {
         lastBonus.value = data.bonus_amount_cents;
         lastBalance.value = data.balance_cents;
         code.value = '';
+        scheduleSuccessDismiss();
         emit('claimed', data.balance_cents);
     } catch (e) {
         state.value = 'error';
@@ -49,10 +66,10 @@ async function submit() {
 </script>
 
 <template>
-    <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 class="text-lg font-semibold text-slate-900">Застосувати промокод</h2>
+    <section class="rounded-2xl border border-line-soft bg-card p-5 sm:p-6">
+        <h2 class="text-base font-semibold tracking-tight">Застосувати промокод</h2>
 
-        <form class="mt-4 flex flex-col gap-3 sm:flex-row" @submit.prevent="submit">
+        <form class="mt-4 flex flex-col gap-2.5 sm:flex-row" @submit.prevent="submit">
             <label for="promo-code" class="sr-only">Промокод</label>
             <input
                 id="promo-code"
@@ -60,44 +77,51 @@ async function submit() {
                 type="text"
                 placeholder="Наприклад, WELCOME50"
                 maxlength="12"
+                autocomplete="off"
+                spellcheck="false"
                 :disabled="loading"
                 :aria-invalid="clientHint ? 'true' : undefined"
                 :aria-describedby="clientHint ? 'promo-code-hint' : undefined"
-                class="flex-1 rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm uppercase tracking-wider focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-slate-50"
+                class="focus-ring min-h-11 flex-1 rounded-lg border border-line bg-canvas px-3.5 font-mono text-sm tracking-[0.08em] text-ink uppercase transition-colors duration-150 placeholder:normal-case placeholder:font-sans placeholder:tracking-normal placeholder:text-ink-faint focus:border-mint disabled:opacity-60"
             />
             <button
                 type="submit"
                 :disabled="loading || !code"
-                class="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                class="pressable focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-mint px-6 text-sm font-semibold text-mint-ink transition-[background-color,opacity] duration-150 hover:bg-mint-soft disabled:cursor-not-allowed disabled:opacity-45"
             >
-                <span v-if="loading" class="inline-flex items-center gap-2">
-                    <svg class="size-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                    </svg>
-                    Перевіряємо…
-                </span>
-                <span v-else>Застосувати</span>
+                <svg v-if="loading" class="spin-fast size-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                    <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                </svg>
+                <span>{{ loading ? 'Перевіряємо…' : 'Застосувати' }}</span>
             </button>
         </form>
 
-        <p v-if="clientHint" id="promo-code-hint" aria-live="polite" class="mt-2 text-sm text-amber-600">{{ clientHint }}</p>
+        <Transition name="pop">
+            <p v-if="clientHint" id="promo-code-hint" aria-live="polite" class="mt-2.5 text-sm text-warn">
+                {{ clientHint }}
+            </p>
+        </Transition>
 
-        <p
-            v-if="state === 'success'"
-            role="status"
-            class="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
-        >
-            Бонус <strong>{{ money(lastBonus) }}</strong> нараховано 🎉
-            Новий баланс: <strong>{{ money(lastBalance) }}</strong>
-        </p>
+        <Transition name="pop" mode="out-in">
+            <p
+                v-if="state === 'success'"
+                key="success"
+                role="status"
+                class="mt-3 rounded-lg border border-mint-deep bg-mint-deep/40 px-3.5 py-2.5 text-sm text-mint"
+            >
+                Бонус <strong class="tabular-nums">+{{ money(lastBonus) }}</strong> нараховано.
+                Новий баланс: <strong class="tabular-nums">{{ money(lastBalance) }}</strong>
+            </p>
 
-        <p
-            v-if="state === 'error'"
-            role="alert"
-            class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"
-        >
-            {{ error }}
-        </p>
+            <p
+                v-else-if="state === 'error'"
+                key="error"
+                role="alert"
+                class="mt-3 rounded-lg border border-danger-deep bg-danger-deep/40 px-3.5 py-2.5 text-sm text-danger"
+            >
+                {{ error }}
+            </p>
+        </Transition>
     </section>
 </template>
