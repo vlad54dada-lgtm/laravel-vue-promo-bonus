@@ -44,7 +44,7 @@ promo_claims                             wallet_transactions
 
 `wallet_transactions` — append-only ledger: кожна зміна балансу лишає рядок з підсумковим балансом. Інваріант для звірки: `users.balance_cents == SUM(wallet_transactions.amount_cents)` по гравцю.
 
-Про невід'ємність балансу: основний інваріант — guard у сервісі. `unsigned` Laravel на SQLite не діє (компілюється у звичайний INTEGER без обмежень), тому в міграції додається raw CHECK-констрейнт `balance_cents >= 0` при створенні таблиці — працює і в SQLite, і в MySQL 8.0.16+.
+Про невід'ємність балансу: основний інваріант — guard у сервісі + тести. `unsigned` Laravel на SQLite не діє (компілюється у звичайний INTEGER), а `ALTER TABLE ... ADD CONSTRAINT` SQLite не підтримує взагалі, тому raw CHECK `balance_cents >= 0` додається в міграції лише під MySQL (driver-умовно); на SQLite захист повністю програмний.
 
 ## Стратегія конкурентності (найважливіша частина)
 

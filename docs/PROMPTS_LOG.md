@@ -42,7 +42,9 @@
 
 ## Етап 1 — Схема БД і сідери
 
-_(заповнюється під час розробки)_
+Виконано за планом з ARCHITECTURE.md без окремих промптів (детальний дизайн схеми зафіксовано на етапі аналізу). Створено: міграції (balance_cents у users, promo_codes, promo_claims з UNIQUE(user_id, promo_code_id), wallet_transactions як append-only ledger), string-backed PHP-енуми статусів, моделі, фабрику PromoCode, сідер з демо-гравцями та трьома кодами.
+
+Ітерація під час реалізації: у документах було заявлено CHECK `balance_cents >= 0` «при створенні таблиці», але колонка додається через ALTER до існуючої таблиці users, а SQLite не підтримує `ALTER TABLE ... ADD CONSTRAINT` — CHECK лишено тільки під MySQL (driver-умовно), документацію синхронізовано з реальністю. `balance_cents` свідомо не у `$fillable` — захист грошового поля від масового присвоєння.
 
 ## Етап 2 — Auth
 
