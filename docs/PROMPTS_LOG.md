@@ -48,11 +48,13 @@
 
 ## Етап 2 — Auth
 
-_(заповнюється під час розробки)_
+Виконано за планом: `POST /api/auth/login` (Sanctum Bearer-токен, 422 на невірні креденшли), `GET /api/me` з балансом. Ітерація: `php artisan pest:install` не створив `tests/Pest.php` — файл створено вручну (прив'язка TestCase + RefreshDatabase до Feature-тестів), у `phpunit.xml` увімкнено in-memory SQLite. 4 тести зелені.
 
 ## Етап 3 — Тікет 1, backend
 
-_(заповнюється під час розробки)_
+Реалізовано за ARCHITECTURE.md: `ClaimPromoRequest` (422 за форматом), ієрархія доменних винятків `PromoException` → JSON `{message, error_code}` з коректним HTTP-статусом, `PromoService::claim` (транзакція; лок гравця → locking read перевірки дубля; ledger-рядок; rejected-записи поза транзакцією; перехоплення `UniqueConstraintViolationException` як фінальний рубіж), `POST /api/promo/claim` з throttle 10/хв, `GET /api/promo/history` (пагінація, фільтр за статусом, per_page із клампом до 50, тільки власні записи).
+
+Тести: 24 нові (вся матриця C1–C10 і H1–H4 з REQUIREMENTS.md, включно з інваріантом «SUM(ledger) == balance» та перевіркою UNIQUE-індексу на рівні БД). Разом 30 passed.
 
 ## Етап 4 — Тікет 1, frontend
 
