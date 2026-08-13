@@ -35,15 +35,10 @@ const STATUS_ICONS = {
     revoked: 'undo',
 };
 
+// Нейтральні графітові кола; колір несе лише іконка
 const STATUS_ICON_WRAP = {
-    applied: 'bg-mint-deep/60 text-mint',
-    rejected: 'bg-danger-deep/60 text-danger',
-    revoked: 'bg-card-2 text-ink-faint',
-};
-
-const STATUS_BADGES = {
-    applied: 'bg-mint-deep/60 text-mint',
-    rejected: 'bg-danger-deep/60 text-danger',
+    applied: 'bg-card-2 text-pos',
+    rejected: 'bg-card-2 text-danger',
     revoked: 'bg-card-2 text-ink-faint',
 };
 
@@ -196,17 +191,17 @@ async function confirmRevoke() {
         <div class="flex flex-wrap items-center justify-between gap-3">
             <h2 class="text-base font-semibold tracking-tight">Історія промокодів</h2>
 
-            <div class="flex gap-0.5 rounded-lg border border-line-soft bg-card-2/70 p-1" role="tablist" aria-label="Фільтр за статусом">
+            <div class="flex flex-wrap gap-1.5" role="tablist" aria-label="Фільтр за статусом">
                 <button
                     v-for="filter in FILTERS"
                     :key="filter.value"
                     type="button"
                     role="tab"
                     :aria-selected="statusFilter === filter.value"
-                    class="focus-ring min-h-9 rounded-md px-3 text-xs font-medium transition-colors duration-150"
+                    class="pressable focus-ring min-h-9 rounded-full border px-3.5 text-xs font-medium transition-colors duration-150"
                     :class="statusFilter === filter.value
-                        ? 'bg-canvas text-ink'
-                        : 'text-ink-faint hover:text-ink-soft'"
+                        ? 'border-ink text-ink'
+                        : 'border-transparent text-ink-faint hover:text-ink-soft'"
                     @click="statusFilter = filter.value"
                 >
                     {{ filter.label }}
@@ -215,19 +210,19 @@ async function confirmRevoke() {
         </div>
 
         <Transition name="pop">
-            <p v-if="error" role="alert" class="mt-4 flex items-start gap-2.5 rounded-lg border border-danger-deep bg-danger-deep/40 px-3.5 py-2.5 text-sm text-danger">
+            <p v-if="error" role="alert" class="mt-4 flex items-start gap-2.5 rounded-xl bg-card-2 px-3.5 py-2.5 text-sm text-danger">
                 <AppIcon name="alert" class="mt-0.5 size-4 shrink-0" />
                 <span>{{ error }}</span>
             </p>
         </Transition>
         <Transition name="pop">
-            <p v-if="revokeError" role="alert" class="mt-4 flex items-start gap-2.5 rounded-lg border border-danger-deep bg-danger-deep/40 px-3.5 py-2.5 text-sm text-danger">
+            <p v-if="revokeError" role="alert" class="mt-4 flex items-start gap-2.5 rounded-xl bg-card-2 px-3.5 py-2.5 text-sm text-danger">
                 <AppIcon name="alert" class="mt-0.5 size-4 shrink-0" />
                 <span>{{ revokeError }}</span>
             </p>
         </Transition>
         <Transition name="pop">
-            <p v-if="revokeSuccess" role="status" class="mt-4 flex items-start gap-2.5 rounded-lg border border-mint-deep bg-mint-deep/40 px-3.5 py-2.5 text-sm text-mint">
+            <p v-if="revokeSuccess" role="status" class="mt-4 flex items-start gap-2.5 rounded-xl bg-card-2 px-3.5 py-2.5 text-sm text-pos">
                 <AppIcon name="check-circle" class="mt-0.5 size-4 shrink-0" />
                 <span>{{ revokeSuccess }}</span>
             </p>
@@ -274,14 +269,9 @@ async function confirmRevoke() {
                 </span>
 
                 <div class="min-w-0 flex-1">
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-baseline gap-2">
                         <span class="font-mono text-sm font-semibold tracking-wide">{{ claim.code }}</span>
-                        <span
-                            class="rounded-full px-2 py-0.5 text-[11px] font-medium"
-                            :class="STATUS_BADGES[claim.status]"
-                        >
-                            {{ STATUS_LABELS[claim.status] }}
-                        </span>
+                        <span class="text-[11px] font-medium text-ink-faint">{{ STATUS_LABELS[claim.status] }}</span>
                     </div>
                     <p class="mt-0.5 text-xs text-ink-faint">
                         {{ dateTime(claim.created_at) }}
@@ -294,7 +284,7 @@ async function confirmRevoke() {
                     <span
                         class="text-sm font-semibold tabular-nums"
                         :class="{
-                            'text-mint': claim.status === 'applied',
+                            'text-pos': claim.status === 'applied',
                             'text-ink-faint': claim.status !== 'applied',
                         }"
                     >
@@ -308,7 +298,7 @@ async function confirmRevoke() {
                         v-if="claim.status === 'applied'"
                         type="button"
                         :disabled="revokingId === claim.id"
-                        class="pressable focus-ring min-h-10 rounded-lg border border-danger-deep px-3.5 text-xs font-medium text-danger transition-colors duration-150 hover:bg-danger-deep/40 disabled:cursor-not-allowed disabled:opacity-50"
+                        class="pressable focus-ring min-h-9 rounded-full border border-line px-3.5 text-xs font-medium text-ink-soft transition-colors duration-150 hover:border-danger hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
                         @click="askRevoke(claim)"
                     >
                         {{ revokingId === claim.id ? 'Скасовуємо…' : 'Скасувати' }}
@@ -324,7 +314,7 @@ async function confirmRevoke() {
             <button
                 type="button"
                 :disabled="page <= 1 || loading"
-                class="pressable focus-ring inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-line px-3.5 text-ink-soft transition-colors duration-150 hover:bg-card-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+                class="pressable focus-ring inline-flex min-h-10 items-center gap-1.5 rounded-full border border-line px-4 text-ink-soft transition-colors duration-150 hover:border-ink-faint hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
                 @click="page--"
             >
                 <AppIcon name="chevron-left" class="size-4" />
@@ -334,7 +324,7 @@ async function confirmRevoke() {
             <button
                 type="button"
                 :disabled="page >= meta.last_page || loading"
-                class="pressable focus-ring inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-line px-3.5 text-ink-soft transition-colors duration-150 hover:bg-card-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+                class="pressable focus-ring inline-flex min-h-10 items-center gap-1.5 rounded-full border border-line px-4 text-ink-soft transition-colors duration-150 hover:border-ink-faint hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
                 @click="page++"
             >
                 Далі
@@ -356,8 +346,8 @@ async function confirmRevoke() {
                     @click.self="revokeTarget = null"
                     @keydown.esc="revokeTarget = null"
                 >
-                    <div class="modal-panel w-full max-w-sm rounded-2xl bg-card-2 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_24px_48px_rgba(0,0,0,0.55)]">
-                        <span class="grid size-10 place-items-center rounded-full bg-danger-deep/60 text-danger">
+                    <div class="modal-panel w-full max-w-sm rounded-2xl bg-card-2 p-6 shadow-[0_24px_48px_rgba(0,0,0,0.6)]">
+                        <span class="grid size-10 place-items-center rounded-full bg-card text-danger">
                             <AppIcon name="undo" class="size-5" />
                         </span>
                         <h3 id="revoke-modal-title" class="mt-4 text-base font-semibold tracking-tight">Скасувати нарахування?</h3>
@@ -369,14 +359,14 @@ async function confirmRevoke() {
                         <div class="mt-6 flex justify-end gap-2">
                             <button
                                 type="button"
-                                class="pressable focus-ring min-h-10 rounded-lg border border-line px-4 text-sm font-medium text-ink-soft transition-colors duration-150 hover:bg-card hover:text-ink"
+                                class="pressable focus-ring min-h-10 rounded-full border border-line px-4 text-sm font-medium text-ink-soft transition-colors duration-150 hover:border-ink-faint hover:text-ink"
                                 @click="revokeTarget = null"
                             >
                                 Залишити
                             </button>
                             <button
                                 type="button"
-                                class="pressable focus-ring min-h-10 rounded-lg bg-danger-strong px-4 text-sm font-semibold text-white transition-[filter] duration-150 hover:brightness-110"
+                                class="pressable focus-ring min-h-10 rounded-full bg-danger-strong px-4 text-sm font-semibold text-white transition-[filter] duration-150 hover:brightness-110"
                                 @click="confirmRevoke"
                             >
                                 Так, скасувати

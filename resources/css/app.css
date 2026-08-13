@@ -10,26 +10,23 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
 
-    /* Темна restrained-палітра: майже чорні нейтрали + один м'ятний акцент
-       (гроші/CTA) + червоний тільки для деструктивного. OKLCH. */
-    --color-canvas: oklch(0.16 0.012 260);
-    --color-card: oklch(0.205 0.014 260);
-    --color-card-2: oklch(0.25 0.016 260);
-    --color-line: oklch(0.32 0.015 260);
-    --color-line-soft: oklch(0.27 0.014 260);
-    --color-ink: oklch(0.95 0.005 260);
-    --color-ink-soft: oklch(0.75 0.012 260);
-    --color-ink-faint: oklch(0.63 0.014 260);
+    /* Монохромний преміум: чистий чорний, пласкі графітові поверхні,
+       білий — головний акцент (CTA, активні стани). Колір лише
+       функціональний: приглушений зелений для «грошей-плюс»,
+       червоний для деструктиву. Жодних градієнтів і свічень. */
+    --color-canvas: oklch(0.13 0.004 250);
+    --color-card: oklch(0.18 0.005 250);
+    --color-card-2: oklch(0.235 0.006 250);
+    --color-line: oklch(0.32 0.006 250);
+    --color-line-soft: oklch(0.25 0.005 250);
+    --color-ink: oklch(0.96 0.002 250);
+    --color-ink-soft: oklch(0.73 0.004 250);
+    --color-ink-faint: oklch(0.62 0.005 250);
 
-    --color-mint: oklch(0.87 0.17 162);
-    --color-mint-soft: oklch(0.8 0.14 162);
-    --color-mint-deep: oklch(0.3 0.06 162);
-    --color-mint-ink: oklch(0.2 0.05 162);
-
-    --color-danger: oklch(0.72 0.17 25);
-    --color-danger-strong: oklch(0.58 0.2 25);
-    --color-danger-deep: oklch(0.27 0.08 25);
-    --color-warn: oklch(0.83 0.13 85);
+    --color-pos: oklch(0.8 0.11 155);
+    --color-danger: oklch(0.72 0.16 25);
+    --color-danger-strong: oklch(0.56 0.19 25);
+    --color-warn: oklch(0.83 0.12 85);
 
     /* Сильні криві: вбудовані css-easing надто мляві */
     --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
@@ -45,18 +42,9 @@ body {
     color: var(--color-ink);
 }
 
-/* Легка віньєтка згори: глибина сцени без смуг і градієнтного шуму */
-body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    background: radial-gradient(640px 320px at 50% -80px, oklch(0.87 0.17 162 / 0.06), transparent 70%);
-}
-
 ::selection {
-    background-color: var(--color-mint);
-    color: var(--color-mint-ink);
+    background-color: var(--color-ink);
+    color: var(--color-canvas);
 }
 
 /* ---- Словник компонентних станів ---- */
@@ -76,22 +64,57 @@ body::before {
     }
 
     .focus-ring:focus-visible {
-        outline: 2px solid var(--color-mint);
+        outline: 2px solid var(--color-ink);
         outline-offset: 2px;
     }
 
-    /* Поверхня картки: ледь помітний вертикальний тон + верхній highlight.
-       Глибина без ghost-card (жодних широких тіней поруч із бордером). */
+    /* Пласка картка: тон замість бордерів і тіней */
     .card-surface {
-        border: 1px solid var(--color-line-soft);
+        background-color: var(--color-card);
         border-radius: 1rem;
-        background: linear-gradient(180deg, oklch(0.215 0.014 260), oklch(0.198 0.014 260));
-        box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.04);
     }
 
-    /* Primary-кнопка: м'яке світіння без бордера */
-    .btn-glow {
-        box-shadow: 0 2px 8px oklch(0.87 0.17 162 / 0.25);
+    /* Floating label (Material filled-стиль): label живе всередині поля,
+       спливає догори на фокусі або коли поле заповнене. Потрібен
+       placeholder=" " на інпуті; label — наступний сиблінг. */
+    .float-input {
+        height: 3.5rem;
+        width: 100%;
+        border-radius: 0.75rem;
+        border: 1px solid var(--color-line);
+        background-color: var(--color-canvas);
+        padding: 1.25rem 0.875rem 0;
+        font-size: 0.875rem;
+        color: var(--color-ink);
+        transition: border-color 150ms ease;
+    }
+
+    .float-input:focus {
+        border-color: var(--color-ink-soft);
+    }
+
+    .float-input:disabled {
+        opacity: 0.6;
+    }
+
+    .float-label {
+        position: absolute;
+        left: 0.9375rem;
+        top: 0.625rem;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.01em;
+        color: var(--color-ink-faint);
+        pointer-events: none;
+        transition: top 200ms var(--ease-out-strong), transform 200ms var(--ease-out-strong),
+            font-size 200ms var(--ease-out-strong);
+    }
+
+    .float-input:placeholder-shown:not(:focus) + .float-label {
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 0.875rem;
+        font-weight: 400;
     }
 }
 
@@ -165,6 +188,10 @@ body::before {
     .pressable:active:not(:disabled) {
         transition: none;
         transform: none;
+    }
+
+    .float-label {
+        transition: none;
     }
 
     .screen-enter-active,

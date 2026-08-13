@@ -121,39 +121,31 @@ onUnmounted(() => {
             <LoginForm v-if="!user" key="login" @logged-in="onLoggedIn" />
 
             <div v-else key="app" class="mx-auto max-w-2xl px-4 py-5 sm:py-8">
-                <header class="mb-5 flex items-center justify-between">
-                    <div class="flex items-center gap-2.5">
-                        <span class="grid size-8 place-items-center rounded-lg bg-mint-deep/70 text-mint">
-                            <AppIcon name="ticket" class="size-4" />
-                        </span>
-                        <span class="text-[15px] font-semibold tracking-tight">Promo Bonus</span>
+                <header class="mb-6 flex items-center justify-between gap-3">
+                    <div class="flex min-w-0 items-center gap-2.5">
+                        <AppIcon name="ticket" class="size-5 shrink-0 text-ink" />
+                        <span class="truncate text-[15px] font-bold tracking-tight">Promo Bonus</span>
                     </div>
-                    <div class="flex items-center gap-3">
-                        <span class="hidden text-sm text-ink-soft sm:block">{{ user.name }}</span>
+                    <div class="flex items-center gap-2">
+                        <!-- Баланс: біла піл-капсула — головна цифра екрана -->
+                        <span
+                            class="inline-flex min-h-10 items-center rounded-full bg-ink px-4 text-[15px] font-bold text-canvas tabular-nums"
+                            :aria-label="`Баланс: ${money(displayBalance)}`"
+                        >
+                            {{ money(displayBalance) }}
+                        </span>
                         <button
                             type="button"
-                            class="pressable focus-ring inline-flex min-h-10 items-center gap-2 rounded-lg border border-line px-3.5 text-sm font-medium text-ink-soft transition-colors duration-150 hover:bg-card hover:text-ink"
+                            class="pressable focus-ring inline-flex min-h-10 items-center gap-2 rounded-full border border-line px-4 text-sm font-medium text-ink-soft transition-colors duration-150 hover:border-ink-faint hover:text-ink"
                             @click="logout"
                         >
                             <AppIcon name="log-out" class="size-4" />
-                            Вийти
+                            <span class="hidden sm:inline">Вийти</span>
                         </button>
                     </div>
                 </header>
 
                 <main class="space-y-4">
-                    <!-- Wallet: баланс — головна цифра екрана -->
-                    <section class="card-surface relative overflow-hidden p-5 sm:p-6">
-                        <div
-                            class="pointer-events-none absolute -top-24 -right-12 size-56 rounded-full bg-mint opacity-[0.13] blur-3xl"
-                            aria-hidden="true"
-                        />
-                        <p class="text-[13px] font-medium text-ink-faint">Баланс гравця</p>
-                        <p class="mt-1 text-4xl leading-none font-bold tracking-tight tabular-nums">
-                            {{ money(displayBalance) }}
-                        </p>
-                    </section>
-
                     <PromoClaimForm @claimed="onClaimed" />
                     <PromoHistory ref="history" @balance-changed="onBalanceChanged" />
                 </main>
