@@ -12,7 +12,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        //
+        // За реверс-проксі (Render/будь-який LB) TLS завершується на проксі:
+        // без довіри до X-Forwarded-* Laravel генерує http-посилання на
+        // асети, і браузер блокує їх на https-сторінці як mixed content.
+        $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
