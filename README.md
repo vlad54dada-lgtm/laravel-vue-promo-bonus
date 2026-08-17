@@ -6,13 +6,13 @@
 
 Проєкт розроблено в парі з AI-інструментом (Claude Code) — повний лог промптів та ітерацій: [docs/PROMPTS_LOG.md](docs/PROMPTS_LOG.md).
 
-## Живе демо (деплой в один клік)
+## Живе демо
 
-У репозиторії є `Dockerfile` і `render.yaml` — проєкт розгортається на [Render](https://render.com) безкоштовним планом:
+**https://laravel-vue-promo-bonus.onrender.com** — вхід: `player@demo.test` / `password`.
 
-**[Deploy to Render →](https://render.com/deploy?repo=https://github.com/vlad54dada-lgtm/laravel-vue-promo-bonus)**
+> Безкоштовний план Render засинає після ~15 хв простою — перший запит будить сервіс за 30–60 сек. Кожен рестарт контейнера скидає базу до чистого стану із сідерами (гравець і три промокоди — див. нижче).
 
-Особливості демо-режиму: кожен старт контейнера скидає базу до чистого стану із сідерами (гравець і три промокоди — завжди готова презентація); безкоштовний план засинає після ~15 хв простою, перший запит будить його за 30–60 сек.
+Розгорнути власну копію: `Dockerfile` + `render.yaml` у репозиторії — **[Deploy to Render →](https://render.com/deploy?repo=https://github.com/vlad54dada-lgtm/laravel-vue-promo-bonus)**
 
 ## Швидкий старт
 

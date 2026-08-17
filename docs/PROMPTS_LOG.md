@@ -171,6 +171,13 @@ React-сніпет FloatingLabelInput переписано на Vue/Tailwind б�
 
 Результат: пояснено, чому Vercel не підходить (serverless без постійної файлової системи — SQLite обнулялась би між запитами). Натомість підготовлено деплой на Render: багатостадійний `Dockerfile` (Node-збірка Vite-асетів → php:8.4-cli + composer --no-dev), `docker/start.sh` (генерація APP_KEY, `migrate:fresh --seed` на кожен старт — завжди чиста демо-база), `.dockerignore`, `render.yaml` (free-план, healthcheck на `/up`) і кнопка «Deploy to Render» у README.
 
+Ітерації деплою (три реальні фікси за логами Render):
+1. Транзієнтний збій composer на білдері → ретрай у Dockerfile + відкладена генерація автолоада.
+2. `Call to undefined function fake()` на старті: сідер тягнув фабрики, а Faker — dev-залежність, якої немає в образі (`--no-dev`). Сідер переписано на прямі `create()` без фабрик.
+3. Найцікавіший: усі HTTP-статуси на проді стали 200, головна віддавала подвійну сторінку помилки. Причина — невидимий UTF-8 BOM у `config/sanctum.php` (артефакт редагування через PowerShell `Set-Content`): PHP відправляв ці байти у вивід до заголовків. Локально це маскував `output_buffering` з dev php.ini, у Docker-образі php.ini немає. Знайдено байтовим сканом усіх php-файлів репозиторію; після фіксу прод перевірено curl'ом: 401/409/422 на місці.
+
+Живе демо: https://laravel-vue-promo-bonus.onrender.com
+
 ---
 
 ### Шаблон запису
