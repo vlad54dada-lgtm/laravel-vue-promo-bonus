@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: promo-bonus
+    runtime: docker
+    plan: free
+    healthCheckPath: /up
+    autoDeploy: true

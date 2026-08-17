@@ -1,0 +1,12 @@
+.git
+.github
+node_modules
+vendor
+public/build
+public/hot
+database/*.sqlite
+.env
+.env.*
+.playwright-mcp
+.phpunit.cache
+storage/logs/*
