@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
@@ -85,4 +85,3 @@ return [
     ],
 
 ];
-
