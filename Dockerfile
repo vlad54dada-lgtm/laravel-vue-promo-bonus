@@ -16,8 +16,14 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
 
+ENV COMPOSER_ALLOW_SUPERUSER=1 \
+    COMPOSER_NO_INTERACTION=1
+
+# --no-autoloader: на цьому шарі ще немає app/ — автолоад генерується нижче.
+# Повтор через || — страховка від транзієнтних мережевих збоїв білдера.
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts
+RUN composer install --no-dev --prefer-dist --no-scripts --no-autoloader --no-progress \
+    || composer install --no-dev --prefer-dist --no-scripts --no-autoloader --no-progress
 
 COPY . .
 RUN composer dump-autoload --optimize \
