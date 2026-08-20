@@ -5,3 +5,9 @@ services:
     plan: free
     healthCheckPath: /up
     autoDeploy: true
+    envVars:
+      # 1 год замість дефолтних 24: кулдаун D7 видно на живому демо,
+      # але спільний акаунт не блокується для наступних відвідувачів на добу
+      # (кожен рестарт контейнера й так скидає БД сідерами)
+      - key: PROMO_COOLDOWN_HOURS
+        value: "1"

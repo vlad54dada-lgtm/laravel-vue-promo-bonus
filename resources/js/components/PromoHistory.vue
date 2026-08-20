@@ -52,6 +52,8 @@ const REASON_LABELS = {
     not_found: 'код не знайдено',
     expired: 'код прострочено',
     already_used: 'код уже використано',
+    // Без згадки «24 год»: вікно конфігується (PROMO_COOLDOWN_HOURS)
+    cooldown: 'кулдаун — бонус уже нещодавно отримано',
 };
 
 /**

@@ -46,7 +46,7 @@ php artisan serve
 |---|---|---|
 | POST | `/api/auth/login` | Bearer-токен за email+password |
 | GET | `/api/me` | Поточний гравець + баланс |
-| POST | `/api/promo/claim` | Тікет 1: нарахувати бонус за кодом (422 формат / 404 `PROMO_NOT_FOUND` / 409 `PROMO_EXPIRED`, `PROMO_ALREADY_USED`) |
+| POST | `/api/promo/claim` | Тікет 1: нарахувати бонус за кодом (422 формат / 404 `PROMO_NOT_FOUND` / 409 `PROMO_EXPIRED`, `PROMO_ALREADY_USED`, `PROMO_COOLDOWN` — останній додатково віддає `next_claim_available_at`) |
 | GET | `/api/promo/history` | Тікет 1: історія з пагінацією та фільтром `status=applied\|rejected\|revoked` |
 | PATCH | `/api/promo/{claimId}/revoke` | Тікет 2: скасувати нарахування (повторно — 409 `CLAIM_ALREADY_REVOKED`, кошти не списуються вдвічі) |
 
@@ -56,6 +56,7 @@ php artisan serve
 - Подвійне нарахування неможливе: лок рядка гравця → locking read перевірки дубля → `UNIQUE(user_id, promo_code_id)` як фінальний рубіж.
 - Подвійне списання неможливе: умовний `UPDATE ... WHERE status='applied'` з перевіркою affected rows.
 - Гравець визначається виключно з токена; чужі claim'и — 404 без розкриття існування.
+- Кулдаун (правило D7): не більше одного успішного claim на 24 години на гравця, незалежно від коду. Вікно — `PROMO_COOLDOWN_HOURS` (дефолт 24, 0 — вимкнено); на живому демо стоїть 1 год, щоб спільний акаунт не блокувався на добу.
 - Деталі: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
 
 ## Тести

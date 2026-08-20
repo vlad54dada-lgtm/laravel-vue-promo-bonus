@@ -19,11 +19,21 @@ abstract class PromoException extends Exception
 
     abstract public function httpStatus(): int;
 
+    /**
+     * Додаткові машинні поля відповіді (контракт REQUIREMENTS.md дозволяє
+     * їх поряд з message/error_code — напр., next_claim_available_at).
+     */
+    protected function extra(): array
+    {
+        return [];
+    }
+
     public function render(Request $request): JsonResponse
     {
         return response()->json([
             'message' => $this->getMessage(),
             'error_code' => $this->errorCode(),
+            ...$this->extra(),
         ], $this->httpStatus());
     }
 }

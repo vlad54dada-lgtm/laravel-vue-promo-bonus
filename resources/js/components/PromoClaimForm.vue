@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onUnmounted, ref } from 'vue';
 import api, { errorMessage } from '../api';
-import { money } from '../format';
+import { money, dateTime } from '../format';
 import AppIcon from './AppIcon.vue';
 
 const emit = defineEmits(['claimed']);
@@ -60,7 +60,13 @@ async function submit() {
         emit('claimed', data.balance_cents);
     } catch (e) {
         state.value = 'error';
-        error.value = errorMessage(e);
+        const data = e.response?.data;
+        // Кулдаун D7: сервер каже «коли можна» (UTC), локальний час — справа клієнта
+        if (data?.error_code === 'PROMO_COOLDOWN' && data.next_claim_available_at) {
+            error.value = `${data.message} Наступна спроба — після ${dateTime(data.next_claim_available_at)}.`;
+        } else {
+            error.value = errorMessage(e);
+        }
         emit('claimed', null); // історія оновлюється і при відмові — там з'явився rejected-запис
     }
 }

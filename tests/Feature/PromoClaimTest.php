@@ -8,6 +8,7 @@ use App\Models\WalletTransaction;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 use function Pest\Laravel\actingAs;
+use function Pest\Laravel\patchJson;
 use function Pest\Laravel\postJson;
 
 // C1: валідний код, перший раз
@@ -166,13 +167,19 @@ it('maps a unique-violation race to 409 with a rejected record via the API', fun
     ]);
     $user->forceFill(['balance_cents' => 5000])->save();
 
-    // Сервіс-«сліпець»: перевірка дубля нічого не бачить — як конкурентна
-    // транзакція під REPEATABLE READ; INSERT впаде на UNIQUE-індексі
+    // Сервіс-«сліпець»: обидві перевіркові locking read'и (дубль і кулдаун)
+    // нічого не бачать — як конкурентна транзакція під REPEATABLE READ;
+    // INSERT впаде на UNIQUE-індексі
     app()->instance(\App\Services\PromoService::class, new class extends \App\Services\PromoService
     {
         protected function hasConsumingClaim($lockedUser, $promo): bool
         {
             return false;
+        }
+
+        protected function cooldownExpiresAt($lockedUser): ?\Illuminate\Support\Carbon
+        {
+            return null;
         }
     });
 
@@ -183,8 +190,11 @@ it('maps a unique-violation race to 409 with a rejected record via the API', fun
         ->assertJsonPath('error_code', 'PROMO_ALREADY_USED');
 
     expect($user->refresh()->balance_cents)->toBe(5000)
-        ->and(WalletTransaction::count())->toBe(0)
-        ->and(PromoClaim::where('status', PromoClaimStatus::Rejected)->count())->toBe(1);
+        ->and(WalletTransaction::count())->toBe(0);
+
+    // Race-гілка мапиться саме на already_used, а не на іншу причину
+    $rejected = PromoClaim::where('status', PromoClaimStatus::Rejected)->sole();
+    expect($rejected->reject_reason->value)->toBe('already_used');
 });
 
 // C8 (продовження): rejected-спроби не блокуються унікальним індексом
@@ -227,10 +237,234 @@ it('keeps the ledger consistent with the balance', function () {
 
     actingAs($user, 'sanctum');
     postJson('/api/promo/claim', ['code' => 'WELCOME50'])->assertOk();
+
+    test()->travel(25)->hours(); // другий claim — за межами кулдауну D7
+
     postJson('/api/promo/claim', ['code' => 'SUMMER100'])->assertOk();
 
     $ledgerSum = (int) WalletTransaction::where('user_id', $user->id)->sum('amount_cents');
 
     expect($user->refresh()->balance_cents)->toBe(15000)
         ->and($ledgerSum)->toBe(15000);
+});
+
+// ── Кулдаун D7: один успішний claim на 24 години на гравця ──────────────────
+
+// C11: інший код у межах вікна → 409 PROMO_COOLDOWN + next_claim_available_at
+it('rejects a different code within the 24h cooldown window', function () {
+    $user = User::factory()->create();
+    PromoCode::factory()->create(['code' => 'WELCOME50', 'amount_cents' => 5000]);
+    PromoCode::factory()->create(['code' => 'SUMMER100', 'amount_cents' => 10000]);
+
+    actingAs($user, 'sanctum');
+
+    postJson('/api/promo/claim', ['code' => 'WELCOME50'])->assertOk();
+    $creditedAt = PromoClaim::sole()->created_at;
+
+    test()->travel(23)->hours();
+
+    postJson('/api/promo/claim', ['code' => 'SUMMER100'])
+        ->assertConflict()
+        ->assertJsonPath('error_code', 'PROMO_COOLDOWN')
+        ->assertJsonPath('next_claim_available_at', $creditedAt->copy()->addHours(24)->toISOString());
+
+    expect($user->refresh()->balance_cents)->toBe(5000)
+        ->and(WalletTransaction::count())->toBe(1);
+
+    $rejected = PromoClaim::where('status', PromoClaimStatus::Rejected)->sole();
+    expect($rejected->reject_reason->value)->toBe('cooldown')
+        ->and($rejected->promo_code_id)->toBeNull()
+        ->and($rejected->code_entered)->toBe('SUMMER100');
+});
+
+// C12: рівно через 24 год вікно спливло (межа: строге >)
+it('allows a different code once the 24h window has fully elapsed', function () {
+    $user = User::factory()->create();
+    PromoCode::factory()->create(['code' => 'WELCOME50', 'amount_cents' => 5000]);
+    PromoCode::factory()->create(['code' => 'SUMMER100', 'amount_cents' => 10000]);
+
+    actingAs($user, 'sanctum');
+
+    // Заморозка секунди: інакше перетин секундної межі між claim і travel
+    // зсуває cutoff і межа «строге >» перевіряється лише ймовірнісно
+    test()->freezeSecond();
+
+    postJson('/api/promo/claim', ['code' => 'WELCOME50'])->assertOk();
+
+    test()->travel(24)->hours();
+
+    postJson('/api/promo/claim', ['code' => 'SUMMER100'])->assertOk();
+
+    expect($user->refresh()->balance_cents)->toBe(15000);
+});
+
+// C13: rejected-спроба кулдаун не запускає
+it('does not start the cooldown from a rejected attempt', function () {
+    $user = User::factory()->create();
+    PromoCode::factory()->create(['code' => 'WELCOME50', 'amount_cents' => 5000]);
+
+    actingAs($user, 'sanctum');
+
+    postJson('/api/promo/claim', ['code' => 'NOSUCHCODE1'])->assertNotFound();
+
+    postJson('/api/promo/claim', ['code' => 'WELCOME50'])->assertOk();
+
+    expect($user->refresh()->balance_cents)->toBe(5000);
+});
+
+// C13 (продовження): відмова через кулдаун вікно не подовжує
+it('does not extend the cooldown window by a rejected cooldown attempt', function () {
+    $user = User::factory()->create();
+    PromoCode::factory()->create(['code' => 'WELCOME50', 'amount_cents' => 5000]);
+    PromoCode::factory()->create(['code' => 'SUMMER100', 'amount_cents' => 10000]);
+
+    actingAs($user, 'sanctum');
+
+    postJson('/api/promo/claim', ['code' => 'WELCOME50'])->assertOk();
+
+    test()->travel(23)->hours();
+    postJson('/api/promo/claim', ['code' => 'SUMMER100'])->assertConflict();
+
+    // Вікно рахується від успішного claim (ще +2 год = 25 від нього),
+    // а не від щойно відхиленої спроби (від неї минуло б лише 2 год)
+    test()->travel(2)->hours();
+    postJson('/api/promo/claim', ['code' => 'SUMMER100'])->assertOk();
+
+    expect($user->refresh()->balance_cents)->toBe(15000);
+});
+
+// C14: revoke кулдаун не знімає і НЕ подовжує (якір — created_at, не revoked_at)
+it('keeps the cooldown after the crediting claim was revoked', function () {
+    $user = User::factory()->create();
+    PromoCode::factory()->create(['code' => 'WELCOME50', 'amount_cents' => 5000]);
+    PromoCode::factory()->create(['code' => 'SUMMER100', 'amount_cents' => 10000]);
+
+    actingAs($user, 'sanctum');
+
+    postJson('/api/promo/claim', ['code' => 'WELCOME50'])->assertOk();
+    $claim = PromoClaim::sole();
+
+    // Revoke через 23 год: якби вікно рахувалось від revoked_at,
+    // next_claim_available_at посунувся б на +47 год від claim
+    test()->travel(23)->hours();
+    patchJson("/api/promo/{$claim->id}/revoke")->assertOk();
+
+    postJson('/api/promo/claim', ['code' => 'SUMMER100'])
+        ->assertConflict()
+        ->assertJsonPath('error_code', 'PROMO_COOLDOWN')
+        ->assertJsonPath('next_claim_available_at', $claim->created_at->copy()->addHours(24)->toISOString());
+
+    expect($user->refresh()->balance_cents)->toBe(0);
+});
+
+// C15: кулдаун — на гравця з токена, не глобальний
+it('scopes the cooldown to the player from the token, not globally', function () {
+    $first = User::factory()->create();
+    $second = User::factory()->create();
+    PromoCode::factory()->create(['code' => 'WELCOME50', 'amount_cents' => 5000]);
+    PromoCode::factory()->create(['code' => 'SUMMER100', 'amount_cents' => 10000]);
+
+    actingAs($first, 'sanctum');
+    postJson('/api/promo/claim', ['code' => 'WELCOME50'])->assertOk();
+
+    // Той самий момент часу: «чуже» вікно другого гравця не стосується
+    actingAs($second, 'sanctum');
+    postJson('/api/promo/claim', ['code' => 'SUMMER100'])->assertOk();
+
+    expect($first->refresh()->balance_cents)->toBe(5000)
+        ->and($second->refresh()->balance_cents)->toBe(10000);
+});
+
+// Вікно перезаводиться від КОЖНОГО успішного claim, а не від першого в історії
+it('re-anchors the cooldown window on each successful claim', function () {
+    $user = User::factory()->create();
+    PromoCode::factory()->create(['code' => 'WELCOME50', 'amount_cents' => 5000]);
+    PromoCode::factory()->create(['code' => 'SUMMER100', 'amount_cents' => 10000]);
+    PromoCode::factory()->create(['code' => 'BONUS200XY', 'amount_cents' => 20000]);
+
+    actingAs($user, 'sanctum');
+
+    postJson('/api/promo/claim', ['code' => 'WELCOME50'])->assertOk();
+
+    test()->travel(25)->hours();
+    postJson('/api/promo/claim', ['code' => 'SUMMER100'])->assertOk();
+    $secondCreditedAt = PromoClaim::where('code_entered', 'SUMMER100')->sole()->created_at;
+
+    // Через 1 год після ДРУГОГО успішного: вікно активне і рахується від нього
+    test()->travel(1)->hours();
+    postJson('/api/promo/claim', ['code' => 'BONUS200XY'])
+        ->assertConflict()
+        ->assertJsonPath('error_code', 'PROMO_COOLDOWN')
+        ->assertJsonPath('next_claim_available_at', $secondCreditedAt->copy()->addHours(24)->toISOString());
+
+    expect($user->refresh()->balance_cents)->toBe(15000);
+});
+
+// Пріоритет D7: прострочений код усередині вікна → PROMO_EXPIRED, не COOLDOWN
+it('prefers PROMO_EXPIRED over the cooldown inside the window', function () {
+    $user = User::factory()->create();
+    PromoCode::factory()->create(['code' => 'WELCOME50', 'amount_cents' => 5000]);
+    PromoCode::factory()->expired()->create(['code' => 'EXPIRED25', 'amount_cents' => 2500]);
+
+    actingAs($user, 'sanctum');
+
+    postJson('/api/promo/claim', ['code' => 'WELCOME50'])->assertOk();
+    test()->travel(1)->hours();
+
+    postJson('/api/promo/claim', ['code' => 'EXPIRED25'])
+        ->assertConflict()
+        ->assertJsonPath('error_code', 'PROMO_EXPIRED');
+
+    $rejected = PromoClaim::where('status', PromoClaimStatus::Rejected)->sole();
+    expect($rejected->reject_reason->value)->toBe('expired');
+});
+
+// Пріоритет D7: неіснуючий код усередині вікна → 404, не COOLDOWN
+it('prefers PROMO_NOT_FOUND over the cooldown inside the window', function () {
+    $user = User::factory()->create();
+    PromoCode::factory()->create(['code' => 'WELCOME50', 'amount_cents' => 5000]);
+
+    actingAs($user, 'sanctum');
+
+    postJson('/api/promo/claim', ['code' => 'WELCOME50'])->assertOk();
+    test()->travel(1)->hours();
+
+    postJson('/api/promo/claim', ['code' => 'NOSUCHCODE1'])
+        ->assertNotFound()
+        ->assertJsonPath('error_code', 'PROMO_NOT_FOUND');
+
+    $rejected = PromoClaim::where('status', PromoClaimStatus::Rejected)->sole();
+    expect($rejected->reject_reason->value)->toBe('not_found');
+});
+
+// Пріоритет: повторний той самий код у вікні → постійна причина ALREADY_USED
+it('prefers PROMO_ALREADY_USED over the cooldown for a repeated code', function () {
+    $user = User::factory()->create();
+    PromoCode::factory()->create(['code' => 'WELCOME50', 'amount_cents' => 5000]);
+
+    actingAs($user, 'sanctum');
+
+    postJson('/api/promo/claim', ['code' => 'WELCOME50'])->assertOk();
+
+    test()->travel(1)->hours(); // глибоко всередині вікна кулдауну
+
+    postJson('/api/promo/claim', ['code' => 'WELCOME50'])
+        ->assertConflict()
+        ->assertJsonPath('error_code', 'PROMO_ALREADY_USED');
+});
+
+// Конфіг: cooldown_hours = 0 повністю вимикає правило
+it('disables the cooldown when cooldown_hours is zero', function () {
+    config(['promo.cooldown_hours' => 0]);
+
+    $user = User::factory()->create();
+    PromoCode::factory()->create(['code' => 'WELCOME50', 'amount_cents' => 5000]);
+    PromoCode::factory()->create(['code' => 'SUMMER100', 'amount_cents' => 10000]);
+
+    actingAs($user, 'sanctum');
+
+    postJson('/api/promo/claim', ['code' => 'WELCOME50'])->assertOk();
+    postJson('/api/promo/claim', ['code' => 'SUMMER100'])->assertOk();
+
+    expect($user->refresh()->balance_cents)->toBe(15000);
 });

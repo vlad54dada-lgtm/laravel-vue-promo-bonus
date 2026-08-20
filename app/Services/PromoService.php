@@ -9,6 +9,7 @@ use App\Exceptions\ClaimAlreadyRevokedException;
 use App\Exceptions\ClaimNotFoundException;
 use App\Exceptions\ClaimNotRevocableException;
 use App\Exceptions\PromoAlreadyUsedException;
+use App\Exceptions\PromoCooldownException;
 use App\Exceptions\PromoExpiredException;
 use App\Exceptions\PromoNotFoundException;
 use App\Models\PromoClaim;
@@ -16,6 +17,7 @@ use App\Models\PromoCode;
 use App\Models\User;
 use App\Models\WalletTransaction;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -27,7 +29,9 @@ use Illuminate\Support\Str;
  * - порядок локів завжди «рядок гравця → рядки promo_claims»;
  * - перевірка «вже використаний» — тільки locking read (звичайний SELECT
  *   під InnoDB REPEATABLE READ читає снапшот і пропустить свіжий коміт);
- * - фінальна гарантія від подвійного нарахування — UNIQUE(user_id, promo_code_id).
+ * - фінальна гарантія від подвійного нарахування — UNIQUE(user_id, promo_code_id);
+ * - кулдаун D7 («раз на N год») — теж locking read під локом гравця; DB-рубежа
+ *   для ковзного вікна не існує, гонку закриває сам лок рядка users.
  */
 class PromoService
 {
@@ -37,6 +41,7 @@ class PromoService
      * @throws PromoNotFoundException
      * @throws PromoExpiredException
      * @throws PromoAlreadyUsedException
+     * @throws PromoCooldownException
      */
     public function claim(User $user, string $rawCode): PromoClaim
     {
@@ -68,6 +73,13 @@ class PromoService
                     throw new PromoAlreadyUsedException;
                 }
 
+                // D7 — після already_used: постійна причина точніша за тимчасову
+                $cooldownExpiresAt = $this->cooldownExpiresAt($lockedUser);
+
+                if ($cooldownExpiresAt !== null) {
+                    throw new PromoCooldownException($cooldownExpiresAt);
+                }
+
                 $claim = PromoClaim::query()->create([
                     'user_id' => $lockedUser->getKey(),
                     'promo_code_id' => $promo->getKey(),
@@ -87,6 +99,9 @@ class PromoService
             }, attempts: 3);
         } catch (PromoAlreadyUsedException $e) {
             $this->recordRejection($user, $code, PromoRejectReason::AlreadyUsed);
+            throw $e;
+        } catch (PromoCooldownException $e) {
+            $this->recordRejection($user, $code, PromoRejectReason::Cooldown);
             throw $e;
         } catch (UniqueConstraintViolationException) {
             // Гонка дійшла до INSERT попри локи — спрацював останній рубіж.
@@ -169,6 +184,34 @@ class PromoService
             ->where('promo_code_id', $promo->getKey())
             ->lockForUpdate()
             ->exists();
+    }
+
+    /**
+     * D7: коли спливає кулдаун гравця, або null, якщо його немає.
+     *
+     * Locking read останнього «споживаючого» claim (promo_code_id IS NOT NULL —
+     * rejected-спроби кулдаун не запускають) у ковзному вікні. Викликається
+     * тільки під локом рядка гравця: UNIQUE-індексом ковзне вікно не виразиш,
+     * тож єдина гарантія від гонки — серіалізація claim-ів гравця цим локом.
+     */
+    protected function cooldownExpiresAt(User $lockedUser): ?Carbon
+    {
+        $hours = (int) config('promo.cooldown_hours');
+
+        if ($hours <= 0) {
+            return null; // кулдаун вимкнено (демо/локальні сценарії)
+        }
+
+        $lastConsuming = PromoClaim::query()
+            ->where('user_id', $lockedUser->getKey())
+            ->whereNotNull('promo_code_id')
+            ->where('created_at', '>', now()->subHours($hours))
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->lockForUpdate()
+            ->first();
+
+        return $lastConsuming?->created_at->addHours($hours);
     }
 
     /**
