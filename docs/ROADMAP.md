@@ -93,6 +93,20 @@ winget install Composer.Composer
 - [ ] Push на GitHub, перевірка що історія комітів читається як історія
 - [ ] Запис відео (сценарій нижче)
 
+## Етап 8 — Кулдаун 24 години на claim (нова фіча після здачі)
+
+Правило D7 з [REQUIREMENTS.md](REQUIREMENTS.md): один успішний claim на 24 години на гравця, незалежно від коду. Docs-first: спершу оновлені REQUIREMENTS/ARCHITECTURE/ROADMAP/PROMPTS_LOG, потім код.
+
+- [ ] Коміт `docs:` — правило D7, контракт `PROMO_COOLDOWN`, матриця C11–C15, стратегія конкурентності
+- [ ] `config/promo.php` (`cooldown_hours`, env `PROMO_COOLDOWN_HOURS`, дефолт 24)
+- [ ] `PromoRejectReason::Cooldown`, `PromoCooldownException` (409, `next_claim_available_at` у JSON)
+- [ ] `PromoService::claim` — перевірка кулдауну locking read'ом у наявній транзакції, після перевірки already_used
+- [ ] Pest-тести C11–C15 + пріоритет `PROMO_ALREADY_USED` над кулдауном; правка тесту ledger (два claim'и тепер потребують time travel)
+- [ ] Frontend: людське повідомлення з локальним часом наступної спроби у формі claim; підпис причини `cooldown` в історії
+- [ ] Коміт `feat:` (backend + тести + frontend + PROMPTS_LOG)
+
+**DoD:** тести зелені; другий код у межах 24 год → 409 з часом наступної спроби на формі; через time travel — 200. **Увага для майбутніх демо:** сценарій відео нижче писався до кулдауну — кроки з двома успішними claim підряд тепер вимагають або два акаунти, або зміну `PROMO_COOLDOWN_HOURS=0`.
+
 ## Сценарій демо-відео (2–5 хв)
 
 1. `php artisan migrate:fresh --seed`, `npm run dev`, `php artisan serve` — показати запуск.

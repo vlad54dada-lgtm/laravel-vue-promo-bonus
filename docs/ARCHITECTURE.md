@@ -34,7 +34,7 @@ promo_claims                             wallet_transactions
 ├─ status         enum: applied |        └─ created_at
 │                 revoked | rejected
 ├─ reject_reason  enum, nullable:
-│                 not_found | expired | already_used
+│                 not_found | expired | already_used | cooldown
 ├─ revoked_at     timestamp, nullable
 ├─ timestamps
 └─ UNIQUE (user_id, promo_code_id)   ← другий рубіж проти подвійного claim
@@ -70,6 +70,8 @@ claim:                                     revoke:
 2. **Унікальний індекс** (user_id, promo_code_id) — фінальна гарантія: навіть якщо лок обійдено (інший шлях коду, баг, особливості движка), другий INSERT впаде; `QueryException` перехоплюється і мапиться на 409 `PROMO_ALREADY_USED`.
 3. **Rate limit** на ендпоінті — гасить перебір і флуд.
 
+**Кулдаун «раз на 24 години» (D7 у [REQUIREMENTS.md](REQUIREMENTS.md)).** Перевірка живе всередині тієї ж транзакції claim, **після** лока рядка гравця і перевірки «цей код уже використаний»: locking read по `promo_claims` (`user_id = ? AND promo_code_id IS NOT NULL AND created_at > now() − 24h`) — звичайний SELECT знову не годиться через снапшот REPEATABLE READ. `promo_code_id IS NOT NULL` відсікає rejected-спроби: вони кулдаун не запускають. На відміну від «один код на гравця», це правило **неможливо виразити UNIQUE-індексом** (вікно ковзне), тож окремого DB-рубежа немає: фінальна гарантія — серіалізація всіх claim-ів гравця через лок його рядка `users` (рубіж №1). Це свідомий компроміс, і він безпечний рівно настільки, наскільки всі шляхи нарахування проходять через `PromoService::claim` — інших шляхів у системі немає. Довжина вікна — `config/promo.php` → `cooldown_hours` (env `PROMO_COOLDOWN_HOURS`, дефолт 24).
+
 Проти подвійного списання — два рубежі: лок рядка claim + перевірка статусу всередині транзакції, і **умовний UPDATE** (`WHERE id=? AND status='applied'`) з перевіркою affected rows — СУБД-незалежна гарантія: 0 рядків означає, що статус уже змінено конкурентом → 409, кошти не списуються вдруге.
 
 **Примітка про SQLite:** Laravel компілює `lockForUpdate()` у no-op для SQLite. SQLite серіалізує лише запис на рівні файла: подвійного нарахування/списання не станеться, але другий конкурентний писатель може отримати `SQLITE_BUSY` («database is locked») — без обробки це 500, а не контрактний 409. Тому контрактну відповідь гарантують СУБД-незалежні рубежі: для claim — унікальний індекс (перехоплений `QueryException` → 409), для revoke — умовний UPDATE. У демо-режимі (`php artisan serve`, один процес) конкуренція не виникає; на MySQL той самий код дає справжні row-локи і детермінований 409.
@@ -97,7 +99,7 @@ app/
 
 Принципи:
 - Контролер: авторизація + виклик сервісу + Resource. Нуль бізнес-логіки.
-- Сервіс кидає типізовані доменні винятки (`PromoNotFound`, `PromoExpired`, `PromoAlreadyUsed`, `ClaimNotFound`, `ClaimAlreadyRevoked`, `ClaimNotRevocable`) — один обробник перетворює їх на JSON з правильним HTTP-кодом.
+- Сервіс кидає типізовані доменні винятки (`PromoNotFound`, `PromoExpired`, `PromoAlreadyUsed`, `PromoCooldown`, `ClaimNotFound`, `ClaimAlreadyRevoked`, `ClaimNotRevocable`) — один обробник перетворює їх на JSON з правильним HTTP-кодом; виняток може додати власні машинні поля до відповіді (`PromoCooldown` → `next_claim_available_at`).
 - Мутації балансу — тільки через сервіс, тільки в транзакції, тільки з ledger-рядком.
 
 ## API
